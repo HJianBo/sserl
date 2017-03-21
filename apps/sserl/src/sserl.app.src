@@ -1,0 +1,21 @@
+{application, sserl,
+ [{description, "An OTP application"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, { sserl_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    mysql_poolboy,
+    mnesia
+   ]},
+  {env,[]},
+  {modules, [sserl_manager, sserl_listener, sserl_conn, sserl_listener_sup]},
+
+  {maintainers, []},
+  {licenses, []},
+  {links, []},
+  {beegzi_status, [
+                  {running_ports, "running ss ports", {sserl_manager, status, []}}
+                  ]}
+ ]}.

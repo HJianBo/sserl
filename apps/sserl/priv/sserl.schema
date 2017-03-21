@@ -1,0 +1,108 @@
+%% -*- mode: erlang -*-
+
+%% =================================================
+%% local setting
+%% =================================================
+{mapping, "ss.listener.$name.type", "sserl.listener", [
+          {datatype, {enum, [{client,client}, {server,server}]}}
+]}.
+%% @doc enable one time auth
+{mapping, "ss.listener.$name.ota", "sserl.listener", [
+          {datatype, {flag, true, false}}
+]}.
+
+%% @doc ss listen ip and port.
+%%      eg: 0.0.0.0:8388
+{mapping, "ss.listener.$name.local", "sserl.listener", [
+          {datatype, ip}
+]}.
+%% @doc server addr
+%%      eg: www.ss.com:8388
+{mapping, "ss.listener.$name.server", "sserl.listener", [
+          {datatype, [ip,string]}
+]}.
+
+%% @doc encrypt method.
+%%      eg: aes-256-cfb
+{mapping, "ss.listener.$name.method", "sserl.listener", [
+          {datatype, string},
+          {default,  "rc4-md5"}
+]}.
+
+%% @doc password.
+{mapping, "ss.listener.$name.password", "sserl.listener", [
+          {datatype, string}
+]}.
+
+{translation,"sserl.listener",
+fun(Conf) ->
+  ConfList = cuttlefish_variable:filter_by_prefix("ss.listener", Conf),
+  Map = lists:foldl(fun({[_,_,Name,"local"], {Addr, Port}}, Acc) ->
+                            case catch [list_to_integer(N) || N <- string:tokens(Addr, ".")] of
+                                [IP1,IP2,IP3,IP4] when is_integer(IP1),is_integer(IP2),is_integer(IP3),is_integer(IP4) ->
+                                    maps:put(Name, [{ip, {IP1,IP2,IP3,IP4}},{port,Port}|maps:get(Name, Acc, [])], Acc);
+                                _ ->
+                                    throw({error, bad_local_ip})
+                            end;
+                       ({[_,_,Name,"server"], {Addr,Port}}, Acc) ->
+                            maps:put(Name, [{server, {Addr,Port}}|maps:get(Name, Acc, [])], Acc);
+                       ({[_,_,Name,"server"], Addr}, Acc) ->
+                            case string:tokens(Addr,":") of
+                                [IP, Port] ->
+                                    maps:put(Name, [{server, {IP,list_to_integer(Port)}}|maps:get(Name, Acc, [])], Acc);
+                                _ ->
+                                    throw({error, invalid_key_server})
+                            end;
+                       ({[_,_,Name, Attr], Value}, Acc) ->
+                            maps:put(Name, [{list_to_atom(Attr), Value}|maps:get(Name, Acc, [])], Acc);
+                       (_, Acc) ->
+                            Acc
+                    end, #{}, ConfList),
+  maps:values(Map)
+end}.
+
+%% =================================================
+%% sync setting
+%% =================================================
+%% @doc is sync enabled
+{mapping, "ss.sync", "sserl.sync_enabled", [
+  {datatype, {enum, [true, false]}},
+  {default, false}
+]}.
+
+%% @doc node id (same with web)
+{mapping, "ss.node_id", "sserl.sync_node_id", [
+  {datatype, integer}
+]}.
+
+%% @doc mysql host
+{mapping, "ss.mysql.host", "sserl.sync_mysql_host", [
+  {datatype, string}
+]}.
+%% @doc mysql port
+{mapping, "ss.mysql.port", "sserl.sync_mysql_port", [
+  {datatype, integer},
+  {default, 3306}
+]}.
+
+%% @doc mysql database
+{mapping, "ss.mysql.db", "sserl.sync_mysql_db", [
+  {datatype, string}
+]}.
+
+%% @doc mysql user
+{mapping, "ss.mysql.user", "sserl.sync_mysql_user", [
+  {datatype, string}
+]}.
+
+%% @doc mysql password
+{mapping, "ss.mysql.pass", "sserl.sync_mysql_pass", [
+  {datatype, string}
+]}.
+
+%% @doc min size flow to report
+%%      default: 1MB
+{mapping, "ss.report_min", "sserl.sync_report_min", [
+  {datatype, integer},
+  {default,  1048576}
+]}.

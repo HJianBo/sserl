@@ -42,8 +42,11 @@ init([]) ->
     Manager = {sserl_manager, {sserl_manager, start_link, []},
             transient, brutal_kill, worker, [sserl_port_manager]},
 
+    Mutil = {sserl_mutil, {sserl_mutil, start_link, []},
+             transient, brutal_kill, worker, []},
+
     {ok, { {one_for_one, 2, 10}, 
-           [FlowEvent, StatEvent, ListenerSup, Manager]} }.
+           [FlowEvent, StatEvent, ListenerSup, Manager, Mutil]} }.
 
 %%====================================================================
 %% Internal functions

@@ -65,8 +65,20 @@ init([]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
+handle_event({listener, Event}, State) ->
+    lager:notice("listener: ~p~n", [Event]),
+    {ok, State};
+
+handle_event({conn, Event}, State) ->
+    lager:debug("conn: ~p~n", [Event]),
+    {ok, State};
+
+handle_event({mutil, Event}, State) ->
+    lager:debug("mutil: ~p~n", [Event]),
+    {ok, State};
+
 handle_event(Event, State) ->
-    io:format("Event:~p~n", [Event]),
+    lager:debug("Event: ~p~n", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

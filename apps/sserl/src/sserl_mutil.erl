@@ -9,6 +9,8 @@
 
 -behaviour(gen_server).
 
+-include("sserl.hrl").
+
 %% API
 -export ([start_link/0, stop/0, status/0]).
 
@@ -114,7 +116,6 @@ handle_cast(stop, State) ->
 			{noreply, State}
 	end;
 handle_cast(_Msg, State) ->
-	io:format("cast: ~p~n", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -178,24 +179,31 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 handle_data({Socket, Addr, Port}, RawData) ->
-	io:format("~p recv [~p:~p]: ~p~n", [Socket, Addr, Port, RawData]),
+	gen_event:notify(?STAT_EVENT, {mutil, {recv, {Addr, Port, RawData}}}),
 	
 	case parse_cmd(RawData) of
 		{ok, {Cmd, Data}} ->
-			io:format("cmd: ~p, data: ~p~n", [Cmd, Data]),
 			case Cmd of
 				ping ->
 					gen_udp:send(Socket, Addr, Port, <<"pong">>);
 				stat ->
 					status();
 				add ->
-					sserl_listener_sup:start(Data);
+					case sserl_listener_sup:start(Data) of 
+						{ok, Pid} ->
+							gen_udp:send(Socket, Addr, Port, <<"ok">>);
+						{error, {badargs, Reason}} ->
+							gen_udp:send(Socket, Addr, Port, atom_to_binary(Reason, utf8));
+						{error, Other} ->
+							gen_udp:send(Socket, Addr, Port, atom_to_binary(Other, utf8))
+					end;
 				remove ->
 					SSPort = proplists:get_value(port, Data),
-					sserl_listener_sup:stop(SSPort)
+					ok = sserl_listener_sup:stop(SSPort),
+					gen_udp:send(Socket, Addr, Port, <<"ok">>)
 			end;
 		{error, Reason} ->
-			io:format("parse cmd error ~p~n", [Reason])
+			lager:info("parse recved data: ~p, error: ~p~n", [RawData, Reason])
 	end.
 
 parse_cmd(RawData) when is_binary(RawData)->

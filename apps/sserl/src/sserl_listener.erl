@@ -91,8 +91,10 @@ start_link(Args) ->
 get_port(Pid) ->
     gen_server:call(Pid, get_port).
 
+%% Return :: {ok, Pid}
 update(Pid, Args) ->
-    gen_server:call(Pid, {update, Args}).
+    gen_server:call(Pid, {update, Args}),
+    {ok, self()}.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -127,7 +129,7 @@ init([State,IP]) ->
             %% set to async accept, so we can do many things on this process
             case prim_inet:async_accept(LSocket, -1) of
                 {ok, _} ->
-                    gen_event:notify(?STAT_EVENT, {listener, new, State#state.port}),
+                    gen_event:notify(?STAT_EVENT, {listener, {new, State#state.port}}),
                     {ok, State#state{lsocket=LSocket}};
                 {error, Error} ->
                     {stop, Error}
@@ -207,13 +209,13 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                          method=Method,password=Password, server=Server, conns=Conns}) ->
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {Addr, _}} = inet:peername(CSocket),
-    gen_event:notify(?STAT_EVENT, {listener, accept, Port, Addr}),
+    gen_event:notify(?STAT_EVENT, {listener, {accept, Port, Addr}}),
 
     {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
 
     case gen_tcp:controlling_process(CSocket, Pid) of
         ok ->
-            gen_event:notify(?STAT_EVENT, {conn, open, Pid}),            
+            gen_event:notify(?STAT_EVENT, {conn, {open, Pid}}),
             Pid ! {shoot, CSocket};
         {error, _} ->
             exit(Pid, kill),
@@ -231,7 +233,7 @@ handle_info({inet_async, _LSocket, _Ref, Error}, State) ->
     {stop, Error, State};
 
 handle_info({'EXIT', Pid, Reason}, State = #state{conns=Conns}) ->
-    gen_event:notify(?STAT_EVENT, {conn, close, Pid, Reason}),
+    gen_event:notify(?STAT_EVENT, {conn, {close, Pid, Reason}}),
     {noreply, State#state{conns=Conns-1}};
 
 handle_info(_Info, State) ->
@@ -248,7 +250,8 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(Reason, State) ->
+    gen_event:notify(?STAT_EVENT, {listener, {stop, State#state.port}}),
     ok.
 
 %%--------------------------------------------------------------------

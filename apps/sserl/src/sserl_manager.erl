@@ -58,11 +58,12 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     load_local_ports(),
-    case sserl_sync_flow:add_handler() of
-        {'EXIT', Reason} ->
-            throw(Reason);
-        _ -> ok
-    end,
+    % case sserl_sync_flow:add_handler() of
+    %     {'EXIT', Reason} ->
+    %         throw(Reason);
+    %     _ -> ok
+    % end,
+    sserl_traffic:add_handler(),
     sserl_stat:add_handler(),
     {ok, #state{}}.
 

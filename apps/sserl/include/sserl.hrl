@@ -12,3 +12,8 @@
 %%      connect   :  {conn, {connect, Addr, Port}}
 %% 
 -define(STAT_EVENT, sserl_stat_event).
+
+
+%% flow traffic statistics event
+%%   - report traffic: {report, Port, Download, Upload}
+-define(TRAFFIC_EVENT, flow_traffic_statistics).

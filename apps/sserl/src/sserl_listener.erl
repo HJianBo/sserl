@@ -45,7 +45,7 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Args) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
 start_link(Args) ->
@@ -250,7 +250,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(Reason, State) ->
+terminate(_Reason, State) ->
     gen_event:notify(?STAT_EVENT, {listener, {stop, State#state.port}}),
     ok.
 

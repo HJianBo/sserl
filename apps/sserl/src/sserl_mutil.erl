@@ -173,9 +173,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%  - remove: {"server_port": 8001}
 %%  - ping
 %%  - stat: {"8001":11370}
-%% @spec function -> return
-%% where
-%%  return
+%% @spec handle_data(SocketInfo, RawData) -> ok | {error, Reason}
+%%
 %% @end
 %%-------------------------------------------------------------------
 handle_data({Socket, Addr, Port}, RawData) ->
@@ -190,7 +189,7 @@ handle_data({Socket, Addr, Port}, RawData) ->
 					status();
 				add ->
 					case sserl_listener_sup:start(Data) of 
-						{ok, Pid} ->
+						{ok, _Pid} ->
 							gen_udp:send(Socket, Addr, Port, <<"ok">>);
 						{error, {badargs, Reason}} ->
 							gen_udp:send(Socket, Addr, Port, atom_to_binary(Reason, utf8));

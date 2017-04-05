@@ -298,6 +298,7 @@ flow_to_args(#flow{port=Port, method=Method, password=Password}) ->
     [{port, Port}, {ip, default_ip()}, {method, Method1}, {password, Password}].
 
 sync_users() ->
+    lager:debug("began syncing users from mysql"),
     case mysql_poolboy:execute(?MYSQL_ID, users, []) of
         {ok, _, Users} ->
             F = fun() ->

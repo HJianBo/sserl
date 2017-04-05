@@ -6,6 +6,8 @@ _*
 *.plt
 *.swp
 *.swo
+apps/*/doc
+apps/*/docs
 .erlang.cookie
 ebin
 log

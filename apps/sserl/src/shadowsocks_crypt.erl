@@ -12,9 +12,9 @@ methods() ->
 %% @doc
 %% Return the cipher information
 %% 
-%% @spec cipher_info(Method, Password::string()) -> #cipher_info{}.
-%% 
-%%      Method := rc4_md5 | des_cfb |  | aes_cfb128
+%% @spec init_cipher_info(Method, Password) -> #cipher_info{}
+%%      Password = string()
+%%      Method := none | rc4_md5 | des_cfb | aes_cfb128
 %% @end
 %%--------------------------------------------------------------------
 init_cipher_info(none, _) ->

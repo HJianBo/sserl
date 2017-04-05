@@ -36,6 +36,11 @@ init([]) ->
     StatEvent = {?STAT_EVENT,
                  {gen_event, start_link, [{local, ?STAT_EVENT}]},
                  permanent, 5000, worker, dynamic},
+
+    StatisticsEvent = {?TRAFFIC_EVENT,
+                      {gen_event, start_link, [{local, ?TRAFFIC_EVENT}]},
+                       permanent, 5000, worker, dynamic},
+
     ListenerSup = {sserl_listener_sup, {sserl_listener_sup, start_link, []},
                   transient, brutal_kill, supervisor, [sserl_listener_sup]},
 
@@ -46,7 +51,7 @@ init([]) ->
              transient, brutal_kill, worker, []},
 
     {ok, { {one_for_one, 2, 10}, 
-           [FlowEvent, StatEvent, ListenerSup, Manager, Mutil]} }.
+           [FlowEvent, StatEvent, StatisticsEvent, ListenerSup, Manager, Mutil]} }.
 
 %%====================================================================
 %% Internal functions

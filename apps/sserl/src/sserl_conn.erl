@@ -206,6 +206,7 @@ handle_info({tcp_closed, SSocket}, State = #state{ssocket=SSocket}) ->
     {noreply, State#state{ssocket=undefined}};
 %% report flow
 handle_info(report_flow, State = #state{port=Port,down=Down,up=Up}) when Down + Up >= ?REPORT_MIN ->
+    gen_event:notify(?TRAFFIC_EVENT, {report, Port, Down, Up}),
     gen_event:notify(?FLOW_EVENT, {report, Port, Down, Up}),
     erlang:send_after(?REPORT_INTERVAL, self(), report_flow),
     {noreply, State#state{down=0, up=0}};
@@ -236,6 +237,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
+    gen_event:notify(?TRAFFIC_EVENT, {report, State#state.port, State#state.down, State#state.up}),
     gen_event:notify(?FLOW_EVENT, {report, State#state.port, State#state.down, State#state.up}),
     ok.
 

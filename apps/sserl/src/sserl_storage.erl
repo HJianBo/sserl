@@ -57,6 +57,13 @@ ports() ->
 	lager:debug("storage get all ports~n"),
 	gen_server:call(?SERVER, ports).
 
+%%-------------------------------------------------------------------
+%% @doc storate flow traffic to dets
+%% 
+%% @spec incrs_traffic(Port, Download, Upload) -> ok
+%%
+%% @end
+%%-------------------------------------------------------------------
 incrs_traffic(Port, Download, Upload) ->
 	lager:debug("storage incrs ~p traffic D: ~p, U: ~p~n", [Port, Download, Upload]),
 	gen_server:cast(?SERVER, {incrs_traffic, {Port, Download, Upload}}).
@@ -116,6 +123,14 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({add_port, PortInfo}, State) -> 
+	dets:insert(?PORT_TAB, PortInfo),
+	{noreply, State};
+
+handle_cast({remove_port, Port}, State) -> 
+	dets:delete(?PORT_TAB, Port),
+	{noreply, State};
+	
 handle_cast({incrs_traffic,{Port, D, U}}, State) ->
 	case dets:lookup(?TRAFFIC_TAB, Port) of
 		[] ->
@@ -125,6 +140,7 @@ handle_cast({incrs_traffic,{Port, D, U}}, State) ->
 			dets:update_counter(?TRAFFIC_TAB, Port, {3, U})
 	end,
 	{noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

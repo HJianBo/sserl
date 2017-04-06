@@ -2,8 +2,22 @@
 %% 
 %% -define(FLOW_EVENT, sserl_flow_event).
 
+
+%% 使用该数据结构, 规范代码中, 对该结构的引用
+-record(portinfo, {port,					% shadowsocks port
+				   password,				% shadowsocks password
+				   method = "rc4-md5",		% default encrypt method
+				   expire_time,				% [optional] server must disable port when expired
+				   conn_limit = 1,			% [require ] supported max connection for port
+				   max_flow = 10*1024*1024,	% [optional] 
+				   ota 	= false,			% [require ]
+				   type = server,			% [require ] server / client
+				   ip = {0,0,0,0},			% [optional] listen ip
+				   server					% [optional] shadowsocks server (client only)
+				   }).
+
 %% stat event: {Sender :: atom(), Event :: any()}
-%%      new listener 	{listener, {new, Port}}
+%%      new listener 	{listener, {new, portinfo()}}
 %%      listener stoped {listener, {stop, Port}}
 %%      accept    :  {listener, {accept, Addr, Port}}
 %%

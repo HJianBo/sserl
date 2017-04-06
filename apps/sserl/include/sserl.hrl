@@ -1,6 +1,6 @@
 %% flow event report: {report, Port, Download, Upload}
 %% 
--define(FLOW_EVENT, sserl_flow_event).
+%% -define(FLOW_EVENT, sserl_flow_event).
 
 %% stat event: {Sender :: atom(), Event :: any()}
 %%      new listener 	{listener, {new, Port}}
@@ -16,4 +16,4 @@
 
 %% flow traffic statistics event
 %%   - report traffic: {report, Port, Download, Upload}
--define(TRAFFIC_EVENT, flow_traffic_statistics).
+-define(TRAFFIC_EVENT, flow_traffic_event).

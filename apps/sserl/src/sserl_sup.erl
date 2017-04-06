@@ -30,16 +30,13 @@ start_link() ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
-    FlowEvent = {?FLOW_EVENT,
-                 {gen_event, start_link, [{local, ?FLOW_EVENT}]},
-                 permanent, 5000, worker, dynamic},
+    TrafficEvent = {?TRAFFIC_EVENT,
+                      {gen_event, start_link, [{local, ?TRAFFIC_EVENT}]},
+                       permanent, 5000, worker, dynamic},
+
     StatEvent = {?STAT_EVENT,
                  {gen_event, start_link, [{local, ?STAT_EVENT}]},
                  permanent, 5000, worker, dynamic},
-
-    StatisticsEvent = {?TRAFFIC_EVENT,
-                      {gen_event, start_link, [{local, ?TRAFFIC_EVENT}]},
-                       permanent, 5000, worker, dynamic},
 
     Storage = {sserl_storage, {sserl_storage, start_link, []},
             transient, brutal_kill, worker, []},
@@ -54,7 +51,7 @@ init([]) ->
              transient, brutal_kill, worker, []},
 
     {ok, { {one_for_one, 2, 10}, 
-           [FlowEvent, StatEvent, StatisticsEvent, Storage, ListenerSup, Manager, Mutil]} }.
+           [TrafficEvent, StatEvent, Storage, ListenerSup, Manager, Mutil]} }.
 
 %%====================================================================
 %% Internal functions

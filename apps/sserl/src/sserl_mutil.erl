@@ -46,8 +46,11 @@ start_link() ->
 stop() ->
 	gen_server:cast(?MODULE, stop).
 
+%% Return :: json()
 status() ->
-	ok.
+	AllPorts = sserl_listener_sup:running_portinfos(),
+	TmpLists = [ sserl_utils:record_to_proplist(PortInfo, record_info(fields, portinfo)) || PortInfo <- AllPorts],
+	jsx:encode(TmpLists).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -186,7 +189,7 @@ handle_data({Socket, Addr, Port}, RawData) ->
 				ping ->
 					gen_udp:send(Socket, Addr, Port, <<"pong">>);
 				stat ->
-					status();
+					gen_udp:send(Socket, Addr, Port, status());
 				add ->
 					case sserl_listener_sup:start(Data) of 
 						{ok, _Pid} ->

@@ -1,6 +1,6 @@
 {application, sserl,
  [{description, "Shadowsocks server side application"},
-  {vsn, "0.2.0"},
+  {vsn, "0.2.1"},
   {registered, []},
   {mod, { sserl_app, []}},
   {applications,

@@ -37,8 +37,8 @@ docs:
 test: 
 	@$(REBAR3) do ct, cover
 
-release: test
+release: 
 	@$(REBAR3) release
 
-prod: test
+prod: 
 	@$(REBAR3) as prod tar

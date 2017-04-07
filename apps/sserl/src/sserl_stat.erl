@@ -65,9 +65,19 @@ init([]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
+handle_event({listener, {new, PortInfo}}, State) ->
+    sserl_storage:add_port(PortInfo),
+    {ok, State};
+handle_event({listener, {update, PortInfo}}, State) ->
+    sserl_storage:add_port(PortInfo),
+    {ok, State};
+handle_event({listener, {stop, Port}}, State) ->
+    sserl_storage:remove_port(Port),
+    {ok, State};
 handle_event({listener, Event}, State) ->
     lager:notice("listener: ~p~n", [Event]),
     {ok, State};
+
 
 handle_event({conn, Event}, State) ->
     lager:debug("conn: ~p~n", [Event]),

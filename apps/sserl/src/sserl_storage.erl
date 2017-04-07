@@ -11,8 +11,10 @@
 
 -behaviour(gen_server).
 
+-include("sserl.hrl").
+
 %% API
--export([start_link/0, add_port/1, remove_port/1, ports/0, incrs_traffic/3]).
+-export([start_link/0, add_port/1, remove_port/1, all_ports/0, incrs_traffic/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -43,6 +45,14 @@ start_link() ->
 	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
+%%-------------------------------------------------------------------
+%% @doc insert port info to dets, or updating if has existed
+%% 
+%% @spec function -> return
+%% where
+%%  return
+%% @end
+%%-------------------------------------------------------------------
 add_port(PortInfo) ->
 	lager:debug("storage add port: ~p~n", [PortInfo]),
 	gen_server:cast(?SERVER, {add_port, PortInfo}).
@@ -53,7 +63,8 @@ remove_port(Port) ->
 	gen_server:cast(?SERVER, {remove_port, Port}).
 
 
-ports() ->
+%% Return :: [portinfo()]
+all_ports() ->
 	lager:debug("storage get all ports~n"),
 	gen_server:call(?SERVER, ports).
 
@@ -65,7 +76,7 @@ ports() ->
 %% @end
 %%-------------------------------------------------------------------
 incrs_traffic(Port, Download, Upload) ->
-	lager:debug("storage incrs ~p traffic D: ~p, U: ~p~n", [Port, Download, Upload]),
+	lager:debug("storage incrs ~p traffic D: ~p KB, U: ~pKB~n", [Port, Download, Upload]),
 	gen_server:cast(?SERVER, {incrs_traffic, {Port, Download, Upload}}).
 
 
@@ -88,7 +99,9 @@ incrs_traffic(Port, Download, Upload) ->
 init([]) ->
 	case filelib:ensure_dir(?DATA_PORT_FILE) of
 		ok ->
-			{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE}, {auto_save, 60 * 1000}]),
+			{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE},
+												 {auto_save, 60 * 1000},
+												 {keypos, #portinfo.port}]),
 			{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE}, {auto_save, 60 * 1000}]),
 			{ok, #state{}};
 		{error, Reason} ->
@@ -110,7 +123,10 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------	
 handle_call(_Request, _From, State) ->
-    Reply = ok,
+	Func = fun (PortInfo, Acc) ->
+		[PortInfo | Acc]
+    end,
+    Reply = dets:foldl(Func, [], ?PORT_TAB),
     {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
@@ -129,6 +145,7 @@ handle_cast({add_port, PortInfo}, State) ->
 
 handle_cast({remove_port, Port}, State) -> 
 	dets:delete(?PORT_TAB, Port),
+	dets:delete(?TRAFFIC_TAB, Port),
 	{noreply, State};
 	
 handle_cast({incrs_traffic,{Port, D, U}}, State) ->

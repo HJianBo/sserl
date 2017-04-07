@@ -57,14 +57,10 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    load_local_ports(),
-    % case sserl_sync_flow:add_handler() of
-    %     {'EXIT', Reason} ->
-    %         throw(Reason);
-    %     _ -> ok
-    % end,
     sserl_traffic:add_handler(),
     sserl_stat:add_handler(),
+    load_local_ports(),
+    load_storage_ports(),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -139,13 +135,44 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
 load_local_ports() ->
     lists:map(fun(C) ->
-                      case sserl_listener_sup:start(C) of
-                          {ok, _} ->
-                              ok;
-                          E ->
-                              throw(E)
-                      end
+                case sserl_listener_sup:start(C) of
+                  {ok, _} ->
+                      ok;
+                  E ->
+                      throw(E)
+                  end
               end, application:get_env(sserl, listener, [])),
     ok.
+
+
+load_storage_ports() ->
+  Func = fun(PortInfo) ->
+      PortArgs = record_to_proplist(PortInfo, record_info(fields, portinfo)),
+      case sserl_listener_sup:start(PortArgs) of
+          {ok, _} ->
+              ok;
+          E ->
+              throw(E)
+      end
+  end,
+  lists:map(Func, sserl_storage:all_ports()),
+  ok.
+
+%% @spec record_to_proplist(Record, Fields) -> proplist()
+%% @doc calls record_to_proplist/3 with a default TypeKey of '__record'
+record_to_proplist(Record, Fields) ->
+    record_to_proplist(Record, Fields, '__record').
+
+%% @spec record_to_proplist(Record, Fields, TypeKey) -> proplist()
+%% @doc Return a proplist of the given Record with each field in the
+%%      Fields list set as a key with the corresponding value in the Record.
+%%      TypeKey is the key that is used to store the record type
+%%      Fields should be obtained by calling record_info(fields, record_type)
+%%      where record_type is the record type of Record
+record_to_proplist(Record, Fields, TypeKey)
+  when tuple_size(Record) - 1 =:= length(Fields) ->
+    lists:zip([TypeKey | Fields], tuple_to_list(Record)).

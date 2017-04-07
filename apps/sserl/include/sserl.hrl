@@ -12,14 +12,16 @@
 				   max_flow = 10*1024*1024,	% [optional] 
 				   ota 	= false,			% [require ]
 				   type = server,			% [require ] server / client
-				   ip = {0,0,0,0},			% [optional] listen ip
+				   %ip = {0,0,0,0},			% [optional] listen ip
 				   server					% [optional] shadowsocks server (client only)
 				   }).
 
 %% stat event: {Sender :: atom(), Event :: any()}
 %%      new listener 	{listener, {new, portinfo()}}
-%%      listener stoped {listener, {stop, Port}}
-%%      accept    :  {listener, {accept, Addr, Port}}
+%%	    update listener {listener, {update, portinfo()}}
+%%      stop listener   {listener, {stop, Port}}
+%%
+%%      accept    :  	{listener, {accept, Addr, Port}}
 %%
 %%      open      :  {conn, {open, Pid}}
 %%      close     :  {conn, {close, Pid, Reason}}

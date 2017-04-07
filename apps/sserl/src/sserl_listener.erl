@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_port/1, update/2]).
+-export([start_link/1, get_port/1, get_portinfo/1, update/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -20,21 +20,14 @@
 -include("sserl.hrl").
 
 -define(SERVER, ?MODULE).
--define(MAX_LIMIT, 16#0FFFFFFFFFFFFFFF).
+-define(MAX_LIMIT, 1024).
 
 -record(state, {
-          ota,          % one time auth
-          port,         % listen port
-          lsocket,      % listen socket
-          conn_limit,   % connection count limit
-          expire_time,  % expire time
-          password,     % 
-          method,       % 
-          accepting,     % is accepting new connection?
-          conns = 0,    % current connection count
-          expire_timer = undefined, % expire timer
-          type = server,
-          server = undefined % server {address, port}
+          lsocket,                  % listen socket
+          accepting,                % is accepting new connection?
+          conns = 0,                % current connection count
+          port_info,                % portinfo()
+          expire_timer = undefined  % expire timer
 }).
 
 %%%===================================================================
@@ -78,18 +71,28 @@ start_link(Args) ->
         CurrTime >= ExpireTime ->
             {error, expired};
         true ->
-            State = #state{ota=OTA, port=Port, lsocket=undefined, 
-                           type = Type,
-                           conn_limit=ConnLimit, 
-                           expire_time=ExpireTime,
-                           password=Password, method=Method, 
-                           server = Server,
-                           expire_timer=erlang:start_timer(max_time(ExpireTime), self(), expire, [{abs,true}])},
-            gen_server:start_link(?MODULE, [State,IP], [])
+            %% max_flow =
+            %% IP
+            PortInfo = #portinfo{port = Port, password = Password, method = Method,
+                                 ota = OTA, type = Type, server = Server,
+                                 conn_limit = ConnLimit,
+                                 expire_time=ExpireTime
+                        },
+            gen_server:start_link(?MODULE, [PortInfo, IP], [])
     end.
 
+%%-------------------------------------------------------------------
+%% @doc get listening port number by Pid
+%% 
+%% @spec get_port(Pid) -> inet:port_number()
+%%
+%% @end
+%%-------------------------------------------------------------------
 get_port(Pid) ->
     gen_server:call(Pid, get_port).
+
+get_portinfo(Pid) ->
+    gen_server:call(Pid, get_portinfo).    
 
 %% Return :: {ok, Pid}
 update(Pid, Args) ->
@@ -111,7 +114,7 @@ update(Pid, Args) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([State,IP]) ->
+init([PortInfo, IP]) ->
     process_flag(trap_exit, true),
 
     Opts = [binary, {backlog, 20},{nodelay, true}, {active, false}, 
@@ -124,13 +127,17 @@ init([State,IP]) ->
              Opts++[{ip, Addr}]
     end,
     %% start listen
-    case gen_tcp:listen(State#state.port, Opts1) of
+
+    case gen_tcp:listen(PortInfo#portinfo.port, Opts1) of
         {ok, LSocket} ->
             %% set to async accept, so we can do many things on this process
             case prim_inet:async_accept(LSocket, -1) of
                 {ok, _} ->
-                    gen_event:notify(?STAT_EVENT, {listener, {new, State#state.port}}),
-                    {ok, State#state{lsocket=LSocket}};
+                    gen_event:notify(?STAT_EVENT, {listener, {new, PortInfo}}),
+                    {ok,#state{lsocket = LSocket,
+                               port_info = PortInfo,
+                               expire_timer=erlang:start_timer(max_time(PortInfo#portinfo.expire_time), self(), expire, [{abs,true}])
+                        }};
                 {error, Error} ->
                     {stop, Error}
             end;
@@ -153,23 +160,29 @@ init([State,IP]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(get_port, _From, State=#state{port=Port}) ->
-    {reply, Port, State};
+handle_call(get_port, _From, State=#state{port_info=PortInfo}) ->
+    {reply, PortInfo#portinfo.port, State};
+
+handle_call(get_portinfo, _From, State=#state{port_info=PortInfo}) ->
+    {reply, PortInfo, State};
 
 %% update args
 handle_call({update, Args}, _From, State) ->
-    ConnLimit  = proplists:get_value(conn_limit,  Args, State#state.conn_limit),
-    ExpireTime = proplists:get_value(expire_time, Args, State#state.expire_time),
-    Password  = proplists:get_value(password, Args, State#state.password),
-    Method     = parse_method(proplists:get_value(method, Args, State#state.method)),    
+    PortInfo = State#state.port_info,
+    ConnLimit  = proplists:get_value(conn_limit,  Args, PortInfo#portinfo.conn_limit),
+    ExpireTime = proplists:get_value(expire_time, Args, PortInfo#portinfo.expire_time),
+    Password  = proplists:get_value(password, Args, PortInfo#portinfo.password),
+    Method     = parse_method(proplists:get_value(method, Args, PortInfo#portinfo.method)),    
     %% reset expire timer
     erlang:cancel_timer(State#state.expire_timer, []),
     ExpireTimer = erlang:start_timer(max_time(ExpireTime), self(), expire, [{abs,true}]),
 
-    {reply, ok, State#state{conn_limit = ConnLimit,
-                            expire_time= ExpireTime,
-                            password   = Password,
-                            method     = Method,
+    PortInf2 = PortInfo#portinfo{conn_limit = ConnLimit,
+                                 expire_time = ExpireTime,
+                                 password = Password,
+                                 method = Method},
+    gen_event:notify(?STAT_EVENT, {listener, {update, PortInf2}}),
+    {reply, ok, State#state{port_info = PortInf2,
                             expire_timer=ExpireTimer
                            }};
 
@@ -205,8 +218,15 @@ handle_info({timeout, _Ref, expire}, State) ->
     {stop, expire, State};
 
 handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}}, 
-            State=#state{ota=OTA, port=Port, type=Type, 
-                         method=Method,password=Password, server=Server, conns=Conns}) ->
+            State=#state{port_info=PortInfo, conns=Conns}) ->
+    
+    OTA = PortInfo#portinfo.ota,
+    Port = PortInfo#portinfo.port,
+    Type = PortInfo#portinfo.type,
+    Method = PortInfo#portinfo.method,
+    Password = PortInfo#portinfo.password,
+    Server = PortInfo#portinfo.server,
+
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {Addr, _}} = inet:peername(CSocket),
     gen_event:notify(?STAT_EVENT, {listener, {accept, Port, Addr}}),
@@ -251,7 +271,8 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
-    gen_event:notify(?STAT_EVENT, {listener, {stop, State#state.port}}),
+    PortInfo = State#state.port_info,
+    gen_event:notify(?STAT_EVENT, {listener, {stop, PortInfo#portinfo.port}}),
     ok.
 
 %%--------------------------------------------------------------------

@@ -8,7 +8,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start/1, stop/1, running_ports/0]).
+-export([start_link/0, start/1, stop/1, running_ports/0, running_portinfos/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -51,6 +51,11 @@ stop(Port) ->
 running_ports() ->
     Children = supervisor:which_children(?SERVER),
     [sserl_listener:get_port(P) || {_, P, _, _} <- Children, is_pid(P)].
+
+%% Return :: [portinfo()]
+running_portinfos() ->
+    Children = supervisor:which_children(?SERVER),
+    [sserl_listener:get_portinfo(P) || {_, P, _, _} <- Children, is_pid(P)].
 
 %%====================================================================
 %% Supervisor callbacks

@@ -76,7 +76,7 @@ all_ports() ->
 %% @end
 %%-------------------------------------------------------------------
 incrs_traffic(Port, Download, Upload) ->
-	lager:debug("storage incrs ~p traffic D: ~p KB, U: ~pKB~n", [Port, Download, Upload]),
+	lager:debug("storage incrs ~p traffic D: ~pB, U: ~pB~n", [Port, Download, Upload]),
 	gen_server:cast(?SERVER, {incrs_traffic, {Port, Download, Upload}}).
 
 

@@ -1,6 +1,6 @@
 -module (sserl_utils).
 
--export([record_to_proplist/2]).
+-export([record_to_proplist/2, trim/1]).
 
 
 %% @spec record_to_proplist(Record, Fields) -> proplist()
@@ -17,3 +17,6 @@ record_to_proplist(Record, Fields) ->
 record_to_proplist(Record, Fields, TypeKey)
   when tuple_size(Record) - 1 =:= length(Fields) ->
     lists:zip([TypeKey | Fields], tuple_to_list(Record)).
+
+trim(S) ->
+    re:replace(S, "(^\\s+)|(\\s+$)", "", [global, {return, list}]).

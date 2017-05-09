@@ -12,7 +12,7 @@
 -include("sserl.hrl").
 
 %% API
--export ([start_link/0, stop/0, status/0]).
+-export ([start_link/0, stop/0, status/0, status/1]).
 
 %% gen_server callback
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -49,7 +49,27 @@ stop() ->
 %% Return :: json()
 status() ->
 	AllPorts = sserl_listener_sup:running_portinfos(),
-	TmpLists = [ sserl_utils:record_to_proplist(PortInfo, record_info(fields, portinfo)) || PortInfo <- AllPorts],
+	TmpLists = lists:map(fun(PortInfo) -> 
+					% convert list() to bitstring() type, overise jsx will encode to json array
+					NewPI = PortInfo#portinfo{password = list_to_binary(PortInfo#portinfo.password)},
+					sserl_utils:record_to_proplist(NewPI, record_info(fields, portinfo))
+				end, AllPorts),
+	jsx:encode(TmpLists).
+
+%% Return :: json()
+status(Port) ->
+	AllPorts = sserl_listener_sup:running_portinfos(),
+	TmpLists = lists:filtermap(fun(PortInfo) -> 
+			    	case Port =:= PortInfo#portinfo.port of
+						true ->
+							% convert list() to bitstring() type, overise jsx will encode to json array
+							NewPortInfo = PortInfo#portinfo{password = list_to_binary(PortInfo#portinfo.password)},
+							{true, sserl_utils:record_to_proplist(NewPortInfo, record_info(fields, portinfo))};
+						_ ->
+							false
+					end
+			   end, AllPorts),
+	lager:debug("~p~n", [TmpLists]),
 	jsx:encode(TmpLists).
 
 %%%===================================================================
@@ -189,11 +209,19 @@ handle_data({Socket, Addr, Port}, RawData) ->
 				ping ->
 					gen_udp:send(Socket, Addr, Port, <<"pong">>);
 				stat ->
-					gen_udp:send(Socket, Addr, Port, status());
+					case Data of
+						SSPort when is_integer(SSPort) ->
+							StatusInfo = status(SSPort),
+							gen_udp:send(Socket, Addr, Port, <<"stat: ", StatusInfo/binary>>);
+						_ ->
+							StatusInfo = status(),
+							gen_udp:send(Socket, Addr, Port, <<"stat: ", StatusInfo/binary>>)
+					end;
 				add ->
 					case sserl_listener_sup:start(Data) of 
 						{ok, _Pid} ->
-							gen_udp:send(Socket, Addr, Port, <<"ok">>);
+							SSPort = integer_to_binary(proplists:get_value(port, Data)),
+							gen_udp:send(Socket, Addr, Port, <<"add: ", SSPort/binary>>);
 						{error, {badargs, Reason}} ->
 							gen_udp:send(Socket, Addr, Port, atom_to_binary(Reason, utf8));
 						{error, Other} ->
@@ -202,7 +230,8 @@ handle_data({Socket, Addr, Port}, RawData) ->
 				remove ->
 					SSPort = proplists:get_value(port, Data),
 					ok = sserl_listener_sup:stop(SSPort),
-					gen_udp:send(Socket, Addr, Port, <<"ok">>)
+					SSPort2 = integer_to_binary(SSPort),
+					gen_udp:send(Socket, Addr, Port, <<"remove: ", SSPort2/binary>>)
 			end;
 		{error, Reason} ->
 			lager:info("parse recved data: ~p, error: ~p~n", [RawData, Reason])
@@ -229,6 +258,10 @@ parse_cmd(RawData) when is_binary(RawData)->
 					[Data2|_] = Data,
 					{ok, Data3} = parse_data(Data2),
 					{ok, {remove, Data3}};
+				<<"stat">> ->
+					[Data2|_] = Data,
+					Data3 = sserl_utils:trim(Data2),
+					{ok, {stat, list_to_integer(Data3)}};
 				_ ->
 					{error, "invaild cmd"}
 			end;

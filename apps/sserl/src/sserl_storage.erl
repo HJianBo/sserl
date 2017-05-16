@@ -102,7 +102,8 @@ init([]) ->
 			{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE},
 												 {auto_save, 60 * 1000},
 												 {keypos, #portinfo.port}]),
-			{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE}, {auto_save, 60 * 1000}]),
+			{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE},
+													{auto_save, 60 * 1000}]),
 			{ok, #state{}};
 		{error, Reason} ->
 			{stop, Reason}

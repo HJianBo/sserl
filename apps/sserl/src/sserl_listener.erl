@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_port/1, get_portinfo/1, update/2]).
+-export([start_link/1, get_port/1, get_portinfo/1, update/2, get_connections/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -25,7 +25,7 @@
 -record(state, {
           lsocket,                  % listen socket
           accepting,                % is accepting new connection?
-          conns = 0,                % current connection count
+          conns = [],                    % current connection list [{Pid, Addr, Port}]
           port_info,                % portinfo()
           expire_timer = undefined  % expire timer
 }).
@@ -78,7 +78,7 @@ start_link(Args) ->
                                  conn_limit = ConnLimit,
                                  expire_time=ExpireTime
                         },
-            gen_server:start_link(?MODULE, [PortInfo, IP], [])
+            gen_server:start_link({local,?SERVER}, ?MODULE, [PortInfo, IP], [])
     end.
 
 %%-------------------------------------------------------------------
@@ -98,6 +98,10 @@ get_portinfo(Pid) ->
 update(Pid, Args) ->
     gen_server:call(Pid, {update, Args}),
     {ok, self()}.
+
+%% Return :: [] | [{Pid, Addr, Port}]
+get_connections() ->
+    gen_server:call(?SERVER, get_conns).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -185,6 +189,8 @@ handle_call({update, Args}, _From, State) ->
     {reply, ok, State#state{port_info = PortInf2,
                             expire_timer=ExpireTimer
                            }};
+handle_call(get_conns, _From, State) ->
+    {reply, State#state.conns, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -228,8 +234,8 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
     Server = PortInfo#portinfo.server,
 
     true = inet_db:register_socket(CSocket, inet_tcp), 
-    {ok, {Addr, _}} = inet:peername(CSocket),
-    gen_event:notify(?STAT_EVENT, {listener, {accept, Port, Addr}}),
+    {ok, {CAddr, CPort}} = inet:peername(CSocket),
+    gen_event:notify(?STAT_EVENT, {listener, {accept, Port, CAddr}}),
 
     {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
 
@@ -241,12 +247,12 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
             exit(Pid, kill),
             gen_tcp:close(CSocket)
     end,
-
+    NewConns = [{Pid, CAddr, CPort}|Conns],
     case prim_inet:async_accept(State#state.lsocket, -1) of
         {ok, _} ->
-            {noreply, State#state{conns=Conns+1}};
+            {noreply, State#state{conns=NewConns}};
         {error, Ref} ->
-            {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=Conns+1}}
+            {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=NewConns}}
     end;
 
 handle_info({inet_async, _LSocket, _Ref, Error}, State) ->
@@ -254,7 +260,14 @@ handle_info({inet_async, _LSocket, _Ref, Error}, State) ->
 
 handle_info({'EXIT', Pid, Reason}, State = #state{conns=Conns}) ->
     gen_event:notify(?STAT_EVENT, {conn, {close, Pid, Reason}}),
-    {noreply, State#state{conns=Conns-1}};
+    Remained = lists:filter(fun(C) -> 
+                case C of
+                    {Pid, _Addr, _Port} -> false;
+                    _ -> true
+                end
+            end, Conns),
+    lager:debug("befort:~p, after:~p, should remove ~p~n", [length(Conns), length(Remained),Pid]),
+    {noreply, State#state{conns=Remained}};
 
 handle_info(_Info, State) ->
     {noreply, State}.

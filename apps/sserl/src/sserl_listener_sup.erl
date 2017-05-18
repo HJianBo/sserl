@@ -8,7 +8,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start/1, stop/1, running_ports/0, running_portinfos/0]).
+-export([start_link/0, start/1, stop/1, running_ports/0, running_portinfos/0, running_state/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -27,10 +27,10 @@ start(Args) ->
     Children = supervisor:which_children(?SERVER),
     case [P || {_, P, _, _} <- Children, is_pid(P), sserl_listener:get_port(P) =:= Port] of
         [Pid] ->
-            lager:info("[~p] updating port ~p", [?MODULE, Args]),
+            lager:info("~p updating port ~p", [?MODULE, Args]),
             sserl_listener:update(Pid, Args);
         _ ->
-            lager:info("[~p] starting port ~p", [?MODULE, Args]),
+            lager:info("~p starting port ~p", [?MODULE, Args]),
             supervisor:start_child(?SERVER, [Args])
     end.
 
@@ -56,6 +56,10 @@ running_ports() ->
 running_portinfos() ->
     Children = supervisor:which_children(?SERVER),
     [sserl_listener:get_portinfo(P) || {_, P, _, _} <- Children, is_pid(P)].
+
+running_state() ->
+    Children = supervisor:which_children(?SERVER),
+    [sserl_listener:get_states(P) || {_, P, _, _} <- Children, is_pid(P)].
 
 %%====================================================================
 %% Supervisor callbacks

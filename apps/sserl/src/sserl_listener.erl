@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_port/1, get_portinfo/1, update/2, get_connections/0]).
+-export([start_link/1, get_port/1, get_portinfo/1, update/2, get_states/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -25,7 +25,7 @@
 -record(state, {
           lsocket,                  % listen socket
           accepting,                % is accepting new connection?
-          conns = [],                    % current connection list [{Pid, Addr, Port}]
+          conns = [],               % current connection list [{Pid, Addr, Port}]
           port_info,                % portinfo()
           expire_timer = undefined  % expire timer
 }).
@@ -78,7 +78,7 @@ start_link(Args) ->
                                  conn_limit = ConnLimit,
                                  expire_time=ExpireTime
                         },
-            gen_server:start_link({local,?SERVER}, ?MODULE, [PortInfo, IP], [])
+            gen_server:start_link(?MODULE, [PortInfo, IP], [])
     end.
 
 %%-------------------------------------------------------------------
@@ -100,8 +100,8 @@ update(Pid, Args) ->
     {ok, self()}.
 
 %% Return :: [] | [{Pid, Addr, Port}]
-get_connections() ->
-    gen_server:call(?SERVER, get_conns).
+get_states(Pid) ->
+    gen_server:call(Pid, get_states).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -189,8 +189,8 @@ handle_call({update, Args}, _From, State) ->
     {reply, ok, State#state{port_info = PortInf2,
                             expire_timer=ExpireTimer
                            }};
-handle_call(get_conns, _From, State) ->
-    {reply, State#state.conns, State};
+handle_call(get_states, _From, State) ->
+    {reply, State, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -235,24 +235,38 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
 
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {CAddr, CPort}} = inet:peername(CSocket),
-    gen_event:notify(?STAT_EVENT, {listener, {accept, Port, CAddr}}),
 
-    {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
+    % 这里做鉴权判断, 通过 conns 里面的 IP 地址进行区分
+    case conn_limit_allow(PortInfo, Conns, CAddr) of
+        false ->
+            lager:notice("~p will accept ~p, but beyond conn limit~n", [Port, CAddr]),
+            gen_tcp:close(CSocket),
+            case prim_inet:async_accept(State#state.lsocket, -1) of
+                {ok, _} ->
+                    {noreply, State};
+                {error, Ref} ->
+                    {stop, {async_accept, inet:format_error(Ref)}, State}
+            end;
+        true ->
+            gen_event:notify(?STAT_EVENT, {listener, {accept, Port, CAddr}}),
 
-    case gen_tcp:controlling_process(CSocket, Pid) of
-        ok ->
-            gen_event:notify(?STAT_EVENT, {conn, {open, Pid}}),
-            Pid ! {shoot, CSocket};
-        {error, _} ->
-            exit(Pid, kill),
-            gen_tcp:close(CSocket)
-    end,
-    NewConns = [{Pid, CAddr, CPort}|Conns],
-    case prim_inet:async_accept(State#state.lsocket, -1) of
-        {ok, _} ->
-            {noreply, State#state{conns=NewConns}};
-        {error, Ref} ->
-            {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=NewConns}}
+            {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
+
+            case gen_tcp:controlling_process(CSocket, Pid) of
+                ok ->
+                    gen_event:notify(?STAT_EVENT, {conn, {open, Pid}}),
+                    Pid ! {shoot, CSocket};
+                {error, _} ->
+                    exit(Pid, kill),
+                    gen_tcp:close(CSocket)
+            end,
+            NewConns = [{Pid, CAddr, CPort}|Conns],
+            case prim_inet:async_accept(State#state.lsocket, -1) of
+                {ok, _} ->
+                    {noreply, State#state{conns=NewConns}};
+                {error, Ref} ->
+                    {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=NewConns}}
+            end
     end;
 
 handle_info({inet_async, _LSocket, _Ref, Error}, State) ->
@@ -266,7 +280,6 @@ handle_info({'EXIT', Pid, Reason}, State = #state{conns=Conns}) ->
                     _ -> true
                 end
             end, Conns),
-    lager:debug("befort:~p, after:~p, should remove ~p~n", [length(Conns), length(Remained),Pid]),
     {noreply, State#state{conns=Remained}};
 
 handle_info(_Info, State) ->
@@ -307,8 +320,28 @@ max_time() ->
 max_time(Time) ->
     erlang:min(Time, max_time()).
 
-
+%% parse encrty method
 parse_method(Method) when is_list(Method); is_binary(Method) ->
     list_to_atom(re:replace(Method, "-", "_", [global, {return, list}]));
 parse_method(Method) when is_atom(Method) ->
     Method.
+
+%% @doc calculate conntectd num
+%% Return :: bool()
+conn_limit_allow(PortInfo, Conns, NewAddr) ->
+    % 使用 `IsContain和limit数量限制` 俩种方式, 来判断是否符合连接限制的规范
+    % 避免了 当前客户端数=2, limit=1. 时, 这俩个客服端都无法服务的场景
+
+    {ConnectMap, IsContain} = lists:foldl(fun({_, Addr, _}, {Map, IsContain}) -> 
+                N = maps:get(Addr, Map, 0),
+                NewMap = maps:put(Addr, N+1, Map),
+                % 当 IsContain 为true, 则表达式为true; 
+                % 当 IsContain 为 false, 表达式值等于 Addr =:= NewAddr
+                IsContain2 = IsContain orelse Addr =:= NewAddr,
+                {NewMap, IsContain2}
+              end, {maps:new(), false}, Conns),
+    lager:debug("is contain ~p, clients count ~p~n", [IsContain, maps:size(ConnectMap)]),
+
+    % 当已经在服务中的 Client, 返回 true;
+    % 当未在服务中的 Client, 判断连接数;
+    IsContain orelse maps:size(ConnectMap) < PortInfo#portinfo.conn_limit.

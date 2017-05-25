@@ -24,7 +24,6 @@
 
 -record(state, {
           lsocket,                  % listen socket
-          accepting,                % is accepting new connection?
           conns = [],               % current connection list [{Pid, Addr, Port}]
           port_info,                % portinfo()
           expire_timer = undefined  % expire timer

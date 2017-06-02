@@ -19,12 +19,6 @@
 
 -define(FLOW_TRAFFIC_TAB, sserl_flow_traffic).
 
--define(SWAP_MIN, 1024). % 1KB
-
--record(flow, {port = undefined,
-			   download = 0,
-			   upload = 0}).
-
 -record(state, {}).
 
 %%===================================================================
@@ -73,22 +67,29 @@ init([]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_event({report, Port, Download, Upload}, State) ->
-	lager:debug("report traffic ~p: d: ~p, u: ~p~n", [Port, Download, Upload]),
-	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-		[] ->
-			ets:insert(?FLOW_TRAFFIC_TAB, {Port, Download, Upload});
-		_ ->
-			ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{2, Download}, {3, Upload}])
-	end,
-	%% TODO:
-    %% 1. update ets counter
-    %% 2. maybe replace traffic to storage
-    self() ! {swap, Port},
-    %% 3. maybe disable port
+handle_event({sending, Traffic}, State) ->
+	lager:debug("report sending traffic ~p traffic: ~p~n", [Traffic#traffic.port, Traffic]),
+	% case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+	% 	[] ->
+	% 		ets:insert(?FLOW_TRAFFIC_TAB, {Port, Download, Upload});
+	% 	_ ->
+	% 		ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{2, Download}, {3, Upload}])
+	% end,
+	{ok, State};
 
-    {ok, State};
-handle_event(_Event, State) ->
+handle_event({complete, Traffic}, State) ->
+	lager:debug("report end traffic ~p traffic: ~p~n", [Traffic#traffic.port, Traffic]),
+	% case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+	% 	[] ->
+	% 		ets:insert(?FLOW_TRAFFIC_TAB, {Port, Download, Upload});
+	% 	_ ->
+	% 		ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{2, Download}, {3, Upload}])
+	% end,
+	% self() ! {save, Port},
+	{ok, State};
+
+handle_event(Event, State) ->
+	lager:debug("unexpected event ~p~n", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -122,10 +123,21 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info({swap, Port}, State) ->
-	%% maybe swap ets statistic data to disk
+% handle_info({maysave, Port}, State) ->
+% 	%% maybe swap ets statistic data to disk
+% 	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+% 		[{_, D, U}] when D + U >= ?SWAP_MIN ->
+% 			do_swap(Port, D, U),
+% 			% reset to zero
+% 			ets:insert(?FLOW_TRAFFIC_TAB, {Port, 0, 0});
+% 		_ ->
+% 			ok
+% 	end,
+% 	{ok, State};
+	
+handle_info({save, Port}, State) ->
 	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-		[{_, D, U}] when D + U >= ?SWAP_MIN ->
+		[{_, D, U}] ->
 			do_swap(Port, D, U),
 			% reset to zero
 			ets:insert(?FLOW_TRAFFIC_TAB, {Port, 0, 0});

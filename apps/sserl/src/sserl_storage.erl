@@ -14,18 +14,13 @@
 -include("sserl.hrl").
 
 %% API
--export([start_link/0, add_port/1, remove_port/1, all_ports/0, incrs_traffic/3]).
+-export([start_link/0, add_port/1, remove_port/1, all_ports/0, write_traffic/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
-
--define(PORT_TAB, port).
--define(TRAFFIC_TAB, traffic).
--define(DATA_PORT_FILE, "./data/port.dets").
--define(DATA_TRAFFIC_FILE, "./data/traffic.dets").
 
 -record(state, {}).
 
@@ -68,17 +63,9 @@ all_ports() ->
 	lager:debug("storage get all ports~n"),
 	gen_server:call(?SERVER, ports).
 
-%%-------------------------------------------------------------------
-%% @doc storate flow traffic to dets
-%% 
-%% @spec incrs_traffic(Port, Download, Upload) -> ok
-%%
-%% @end
-%%-------------------------------------------------------------------
-incrs_traffic(Port, Download, Upload) ->
-	lager:debug("storage incrs ~p traffic D: ~pB, U: ~pB~n", [Port, Download, Upload]),
-	gen_server:cast(?SERVER, {incrs_traffic, {Port, Download, Upload}}).
-
+write_traffic(Traffic) ->
+	lager:debug("write traffic~p~n", [Traffic]),
+	gen_server:cast(?SERVER, {write_traffic, Traffic}).
 
 
 %%===================================================================
@@ -97,17 +84,27 @@ incrs_traffic(Port, Download, Upload) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-	case filelib:ensure_dir(?DATA_PORT_FILE) of
-		ok ->
-			{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE},
-												 {auto_save, 60 * 1000},
-												 {keypos, #portinfo.port}]),
-			{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE},
-													{auto_save, 60 * 1000}]),
-			{ok, #state{}};
-		{error, Reason} ->
-			{stop, Reason}
-	end.
+	mnesia:create_schema([node()]),
+    mnesia:start(),
+    mnesia:create_table(portinfo,
+                        [{attributes, record_info(fields, portinfo)}, 
+                         {disc_copies, [node()]}]),
+    mnesia:create_table(traffic,
+                        [{attributes, record_info(fields, traffic)},
+                         {disc_copies, [node()]}]),
+	
+	{ok, #state{}}.
+	% case filelib:ensure_dir(?DATA_PORT_FILE) of
+	% 	ok ->
+	% 		{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE},
+	% 											 {auto_save, 60 * 1000},
+	% 											 {keypos, #portinfo.port}]),
+	% 		{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE},
+	% 												{auto_save, 60 * 1000}]),
+	% 		{ok, #state{}};
+	% 	{error, Reason} ->
+	% 		{stop, Reason}
+	% end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -123,11 +120,19 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------	
+handle_call(ports, _From, State) ->
+	% Func = fun (PortInfo, Acc) ->
+	% 	[PortInfo | Acc]
+    % end,
+    % Reply = dets:foldl(Func, [], ?PORT_TAB),
+	Reply = [],
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
-	Func = fun (PortInfo, Acc) ->
-		[PortInfo | Acc]
-    end,
-    Reply = dets:foldl(Func, [], ?PORT_TAB),
+	% Func = fun (PortInfo, Acc) ->
+	% 	[PortInfo | Acc]
+    % end,
+    % Reply = dets:foldl(Func, [], ?PORT_TAB),
+	Reply = ok,
     {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
@@ -141,22 +146,17 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({add_port, PortInfo}, State) -> 
-	dets:insert(?PORT_TAB, PortInfo),
+	mnesia:dirty_write(portinfo, PortInfo),
 	{noreply, State};
 
-handle_cast({remove_port, Port}, State) -> 
-	dets:delete(?PORT_TAB, Port),
-	dets:delete(?TRAFFIC_TAB, Port),
+handle_cast({remove_port, Port}, State) ->
+	%% XXX:
+	mnesia:dirty_delete(portinfo, Port),
+	mnesia:dirty_delete(traffic, Port),
 	{noreply, State};
-	
-handle_cast({incrs_traffic,{Port, D, U}}, State) ->
-	case dets:lookup(?TRAFFIC_TAB, Port) of
-		[] ->
-			dets:insert(?TRAFFIC_TAB, {Port, D, U});
-		_ ->
-			dets:update_counter(?TRAFFIC_TAB, Port, {2, D}),
-			dets:update_counter(?TRAFFIC_TAB, Port, {3, U})
-	end,
+
+handle_cast({write_traffic, Traffic}, State) ->
+	mnesia:dirty_write(traffic, Traffic),
 	{noreply, State};
 
 handle_cast(_Msg, State) ->

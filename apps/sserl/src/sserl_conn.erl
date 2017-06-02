@@ -23,7 +23,7 @@
 -define(SERVER, ?MODULE).
 -define(RECV_TIMOUT, 180000).
 -define(REPORT_INTERVAL, 1000).
--define(REPORT_MIN,   10485760). % 10MB
+-define(REPORT_MIN,   1048576). % 1MB
 
 -define(TCP_OPTS, [binary, {packet, raw}, {active, once},{nodelay, true}]).
 
@@ -31,9 +31,10 @@
 -record(state, {
           csocket,
           ssocket,
+          source = undefined,
+          target = undefined,
           ota,
           port,
-          cipher_info,
           down = 0,
           up   = 0,
           sending = 0,
@@ -42,7 +43,7 @@
           ota_id = 0,
           ota_iv = <<>>,
           type = server,
-          target = undefined,
+          cipher_info,
           c2s_handler=undefined,
           s2c_handler=undefined
          }).
@@ -67,8 +68,10 @@ init(Socket, {Port, Server, OTA, Type, {Method,Password}}) ->
     proc_lib:init_ack({ok, self()}),
     wait_socket(Socket),
     Cipher = shadowsocks_crypt:init_cipher_info(Method, Password),
+    {ok, Source} = inet:peername(Socket),
     State = #state{csocket=Socket, ssocket=undefined, 
                    ota=OTA, port=Port, type=Type,
+                   source = Source,
                    target = Server,
                    cipher_info=Cipher},
     init_proto(State).
@@ -77,7 +80,7 @@ init(Socket, {Port, Server, OTA, Type, {Method,Password}}) ->
 init_proto(State=#state{type=server,csocket=CSocket}) ->
     State1 = recv_ivec(State),
     {Addr, Port, Data, State2} = recv_target(State1),
-    gen_event:notify(?STAT_EVENT, {conn, {connect, Addr, Port}}),
+    gen_event:notify(?STAT_EVENT, {conn, {connect, self(), State#state.source, {Addr, Port}}}),
     case gen_tcp:connect(Addr, Port, ?TCP_OPTS) of
         {ok, SSocket} ->
             self() ! {send, Data},
@@ -205,8 +208,10 @@ handle_info({tcp_closed, CSocket}, State = #state{csocket=CSocket}) ->
 handle_info({tcp_closed, SSocket}, State = #state{ssocket=SSocket}) ->
     {noreply, State#state{ssocket=undefined}};
 %% report flow
-handle_info(report_flow, State = #state{port=Port,down=Down,up=Up}) when Down + Up >= ?REPORT_MIN ->
-    gen_event:notify(?TRAFFIC_EVENT, {report, Port, Down, Up}),
+handle_info(report_flow, State = #state{port=Port, source=Source, target=Target, 
+                                        down=Down, up=Up}) when Down + Up >= ?REPORT_MIN ->
+    Traffic = #traffic{port=Port, source=Source, target=Target, down=Down, up=Up},
+    gen_event:notify(?TRAFFIC_EVENT, {sending, Traffic}),
     erlang:send_after(?REPORT_INTERVAL, self(), report_flow),
     {noreply, State#state{down=0, up=0}};
 handle_info(report_flow, State) ->
@@ -235,8 +240,10 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, State) ->
-    gen_event:notify(?TRAFFIC_EVENT, {report, State#state.port, State#state.down, State#state.up}),
+terminate(_Reason, _State = #state{port=Port, source=Source, target=Target,
+                                  down=Down, up=Up}) ->
+    Traffic = #traffic{port=Port, source=Source, target=Target, down=Down, up=Up},
+    gen_event:notify(?TRAFFIC_EVENT, {complete, Traffic}),
     ok.
 
 %%--------------------------------------------------------------------

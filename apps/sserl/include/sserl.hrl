@@ -3,7 +3,6 @@
 %% -define(FLOW_EVENT, sserl_flow_event).
 
 
-%% 使用该数据结构, 规范代码中, 对该结构的引用
 -record(portinfo, {port,					% shadowsocks port
 				   password,				% shadowsocks password
 				   method = "rc4-md5",		% default encrypt method
@@ -16,20 +15,28 @@
 				   server					% [optional] shadowsocks server (client only)
 				   }).
 
+-record(traffic, {port, 
+                  source,
+                  target,
+                  up,
+                  down,
+                  time}).
+
+
 %% stat event: {Sender :: atom(), Event :: any()}
 %%      new listener 	{listener, {new, portinfo()}}
 %%	    update listener {listener, {update, portinfo()}}
 %%      stop listener   {listener, {stop, Port}}
 %%
-%%      accept    :  	{listener, {accept, Addr, Port}}
+%%      accept    :  	{listener, {accept, Port, ClientAddr}}
 %%
 %%      open      :  {conn, {open, Pid}}
 %%      close     :  {conn, {close, Pid, Reason}}
-%%      connect   :  {conn, {connect, Addr, Port}}
+%%      connect   :  {conn, {connect, Pid, Source, Tagert}}
 %% 
 -define(STAT_EVENT, sserl_stat_event).
 
 
 %% flow traffic statistics event
-%%   - report traffic: {report, Port, Download, Upload}
+%%	 - report traffic: {complete, traffic()}
 -define(TRAFFIC_EVENT, flow_traffic_event).

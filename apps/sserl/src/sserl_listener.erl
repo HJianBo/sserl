@@ -247,7 +247,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
         true ->
-            gen_event:notify(?STAT_EVENT, {listener, {accept, Port, CAddr}}),
+            gen_event:notify(?STAT_EVENT, {listener, {accept, Port, {CAddr, CPort}}}),
 
             {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
 
@@ -339,8 +339,7 @@ conn_limit_allow(PortInfo, Conns, NewAddr) ->
                 IsContain2 = IsContain orelse Addr =:= NewAddr,
                 {NewMap, IsContain2}
               end, {maps:new(), false}, Conns),
-    lager:debug("is contain ~p, clients count ~p~n", [IsContain, maps:size(ConnectMap)]),
-
+              
     % 当已经在服务中的 Client, 返回 true;
     % 当未在服务中的 Client, 判断连接数;
     IsContain orelse maps:size(ConnectMap) < PortInfo#portinfo.conn_limit.

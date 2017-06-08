@@ -47,7 +47,7 @@ init([]) ->
 	case application:get_env(traffic_enable) of
 		{ok, true} ->
 			%% 2. setup/init ets/dets/mnesia
-			ets:new(?FLOW_TRAFFIC_TAB, [named_table]),
+			ets:new(?FLOW_TRAFFIC_TAB, [named_table, {keypos, 3}]),
 			lager:debug("initialized sserl_traffic"),
 			{ok, #state{}};
 		_ ->
@@ -69,23 +69,13 @@ init([]) ->
 %%--------------------------------------------------------------------
 handle_event({sending, Traffic}, State) ->
 	lager:debug("report sending traffic ~p traffic: ~p~n", [Traffic#traffic.port, Traffic]),
-	% case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-	% 	[] ->
-	% 		ets:insert(?FLOW_TRAFFIC_TAB, {Port, Download, Upload});
-	% 	_ ->
-	% 		ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{2, Download}, {3, Upload}])
-	% end,
+	saveto_ets(Traffic),
 	{ok, State};
 
-handle_event({complete, Traffic}, State) ->
-	lager:debug("report end traffic ~p traffic: ~p~n", [Traffic#traffic.port, Traffic]),
-	% case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-	% 	[] ->
-	% 		ets:insert(?FLOW_TRAFFIC_TAB, {Port, Download, Upload});
-	% 	_ ->
-	% 		ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{2, Download}, {3, Upload}])
-	% end,
-	% self() ! {save, Port},
+handle_event({complete, Traffic=#traffic{port=Port}}, State) ->
+	lager:debug("report end traffic ~p traffic: ~p~n", [Port, Traffic]),
+	saveto_ets(Traffic),
+	self() ! {save, Port},
 	{ok, State};
 
 handle_event(Event, State) ->
@@ -123,24 +113,12 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-% handle_info({maysave, Port}, State) ->
-% 	%% maybe swap ets statistic data to disk
-% 	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-% 		[{_, D, U}] when D + U >= ?SWAP_MIN ->
-% 			do_swap(Port, D, U),
-% 			% reset to zero
-% 			ets:insert(?FLOW_TRAFFIC_TAB, {Port, 0, 0});
-% 		_ ->
-% 			ok
-% 	end,
-% 	{ok, State};
-	
 handle_info({save, Port}, State) ->
 	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
-		[{_, D, U}] ->
-			do_swap(Port, D, U),
-			% reset to zero
-			ets:insert(?FLOW_TRAFFIC_TAB, {Port, 0, 0});
+		[Traffic] ->
+			saveto_mnesia(Traffic),
+			% delete
+			ets:delete(?FLOW_TRAFFIC_TAB, Port);
 		_ ->
 			ok
 	end,
@@ -180,9 +158,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%===================================================================
 %% Internel function
 %%===================================================================
+saveto_ets(TrafficSlice=#traffic{port=Port}) ->
+	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+		[] ->
+			ets:insert(?FLOW_TRAFFIC_TAB, TrafficSlice);
+		[HadTraffic] ->
+			Download = HadTraffic#traffic.down,
+			Upload = HadTraffic#traffic.up,
+			ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{6, Download}, {7, Upload}])
+	end.
 
+saveto_mnesia(Traffic) ->
+	% save to mnesia
+	lager:debug("save traffic to mnesia: ~p~n", [Traffic]),
+	sserl_storage:write_traffic(Traffic).
 
-do_swap(Port, D, U) ->
-	sserl_storage:incrs_traffic(Port, D, U).
+% do_swap(Port, D, U) ->
+% 	sserl_storage:incrs_traffic(Port, D, U).
 
 

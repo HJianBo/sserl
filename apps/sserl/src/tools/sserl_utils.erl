@@ -20,3 +20,10 @@ record_to_proplist(Record, Fields, TypeKey)
 
 trim(S) ->
     re:replace(S, "(^\\s+)|(\\s+$)", "", [global, {return, list}]).
+
+timestamp() ->
+    {T1, T2, T3} = timestamp(),
+    % s
+    % T1*1000000+T2+T3/1000000.
+    % ms
+    T1*1000000000+T2*1000+T3/1000.

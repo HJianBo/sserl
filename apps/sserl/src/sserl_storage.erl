@@ -88,10 +88,12 @@ init([]) ->
     mnesia:start(),
     mnesia:create_table(portinfo,
                         [{attributes, record_info(fields, portinfo)}, 
-                         {disc_copies, [node()]}]),
+                         {disc_copies, [node()]},
+						 {type, set}]),
     mnesia:create_table(traffic,
                         [{attributes, record_info(fields, traffic)},
-                         {disc_copies, [node()]}]),
+                         {disc_copies, [node()]},
+						 {type, set}]),
 	
 	{ok, #state{}}.
 	% case filelib:ensure_dir(?DATA_PORT_FILE) of

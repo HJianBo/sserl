@@ -2,7 +2,7 @@
 %% 
 %% -define(FLOW_EVENT, sserl_flow_event).
 
-
+% rd(portinfo, {port,password,method,expire_time,conn_limit,max_flow,ota,type,server})
 -record(portinfo, {port,					% shadowsocks port
 				   password,				% shadowsocks password
 				   method = "rc4-md5",		% default encrypt method
@@ -15,7 +15,7 @@
 				   server					% [optional] shadowsocks server (client only)
 				   }).
 % rd(traffic, {id, port,source,target,down,up,time}).
--record(traffic, {id,			% id = pid+timestamp
+-record(traffic, {id,			% id = rand number
 				  port, 
                   source,
                   target,
@@ -23,6 +23,12 @@
                   up,
                   time}).
 
+% rd(traffic_counter4day, {id,date,port,down,up}).
+-record(traffic_counter4day, {id,				% id = date+port
+							  date,
+							  port,
+							  down = 0,
+							  up = 0}).
 
 %% stat event: {Sender :: atom(), Event :: any()}
 %%      new listener 	{listener, {new, portinfo()}}

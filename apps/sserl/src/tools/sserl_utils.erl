@@ -1,6 +1,8 @@
 -module (sserl_utils).
 
--export([record_to_proplist/2, trim/1, timestamp/0, gen_randnum/0]).
+-export([record_to_proplist/2, trim/1, gen_randnum/0, timestamp_to_datetime/1]).
+
+-export([timestamp/0, timestamp_ms/0, timestamp_us/0]).
 
 
 %% @spec record_to_proplist(Record, Fields) -> proplist()
@@ -21,12 +23,24 @@ record_to_proplist(Record, Fields, TypeKey)
 trim(S) ->
     re:replace(S, "(^\\s+)|(\\s+$)", "", [global, {return, list}]).
 
+% 返回时间戳(单位: 秒)
 timestamp() ->
     {T1, T2, T3} = erlang:timestamp(),
-    % s
-    T1*1000000+T2+T3/1000000.
-    % ms
-    % T1*1000000000+T2*1000+T3/1000.
+    T1*1000000+T2.
+
+% 返回时间戳(单位: 毫秒)
+timestamp_ms() ->
+    {T1, T2, T3} = erlang:timestamp(),
+    T1*1000000000+T2*1000+(T3 div 1000).
+
+% 返回时间戳(单位: 微秒)
+timestamp_us() ->
+    {T1, T2, T3} = erlang:timestamp(),
+    T1*1000000000000+T2*1000000+T3.
+
+timestamp_to_datetime(Timestamp) ->  
+    calendar:gregorian_seconds_to_datetime(Timestamp +  
+        calendar:datetime_to_gregorian_seconds({{1970,1,1}, {0,0,0}})). 
 
 gen_randnum() ->
     erlang:list_to_integer(lists:concat(erlang:binary_to_list(crypto:strong_rand_bytes(5)))).

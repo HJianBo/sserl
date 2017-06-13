@@ -51,18 +51,15 @@ start_link() ->
 %% @end
 %%-------------------------------------------------------------------
 add_port(PortInfo) ->
-	lager:debug("storage add port: ~p~n", [PortInfo]),
 	gen_server:cast(?SERVER, {add_port, PortInfo}).
 
 
 remove_port(Port) ->
-	lager:debug("storage remove port: ~p~n", [Port]),
 	gen_server:cast(?SERVER, {remove_port, Port}).
 
 
 %% Return :: [portinfo()]
 all_ports() ->
-	lager:debug("storage get all ports~n"),
 	gen_server:call(?SERVER, ports).
 
 write_traffic(Traffic) ->
@@ -91,24 +88,19 @@ init([]) ->
     mnesia:create_table(portinfo,
                         [{attributes, record_info(fields, portinfo)}, 
                          {disc_copies, [node()]},
-						 {type, bag}]),
+						 {type, set}]),
+
+	mnesia:create_table(traffic_counter4day,
+                        [{attributes, record_info(fields, traffic_counter4day)}, 
+                         {disc_copies, [node()]},
+						 {type, set}]),
+
     mnesia:create_table(traffic,
                         [{attributes, record_info(fields, traffic)},
                          {disc_copies, [node()]},
 						 {type, bag}]),
 	
 	{ok, #state{}}.
-	% case filelib:ensure_dir(?DATA_PORT_FILE) of
-	% 	ok ->
-	% 		{ok, _} = dets:open_file(?PORT_TAB, [{file, ?DATA_PORT_FILE},
-	% 											 {auto_save, 60 * 1000},
-	% 											 {keypos, #portinfo.port}]),
-	% 		{ok, _} = dets:open_file(?TRAFFIC_TAB, [{file, ?DATA_TRAFFIC_FILE},
-	% 												{auto_save, 60 * 1000}]),
-	% 		{ok, #state{}};
-	% 	{error, Reason} ->
-	% 		{stop, Reason}
-	% end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -125,17 +117,10 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------	
 handle_call(ports, _From, State) ->
-	% Func = fun (PortInfo, Acc) ->
-	% 	[PortInfo | Acc]
-    % end,
-    % Reply = dets:foldl(Func, [], ?PORT_TAB),
-	Reply = [],
+	lager:debug("storage get all ports~n"),
+	Reply = mnesia:dirty_match_object(portinfo, #portinfo{_='_'}),
     {reply, Reply, State};
 handle_call(_Request, _From, State) ->
-	% Func = fun (PortInfo, Acc) ->
-	% 	[PortInfo | Acc]
-    % end,
-    % Reply = dets:foldl(Func, [], ?PORT_TAB),
 	Reply = ok,
     {reply, Reply, State}.
 
@@ -150,18 +135,57 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({add_port, PortInfo}, State) -> 
+	lager:debug("storage add port: ~p~n", [PortInfo]),
 	mnesia:dirty_write(portinfo, PortInfo),
 	{noreply, State};
 
 handle_cast({remove_port, Port}, State) ->
-	%% XXX:
-	mnesia:dirty_delete(portinfo, Port),
-	mnesia:dirty_delete(traffic, Port),
-	{noreply, State};
+	lager:debug("storage remove port: ~p~n", [Port]),
 
-handle_cast({write_traffic, Traffic}, State) ->
-	mnesia:dirty_write(traffic, Traffic),
-	{noreply, State};
+	DelTraffic = 
+		fun() ->
+			mnesia:delete(portinfo, Port, write),
+			DelFunc = 
+				fun(Traffic) -> 
+					mnesia:delete_object(traffic, Traffic, write)
+				end,
+
+			All = mnesia:match_object(traffic, #traffic{port=Port, _='_'}, read),
+			lists:foreach(DelFunc, All)
+		end,
+	case catch mnesia:activity(transaction, DelTraffic) of
+		{'EXIT', Reason} ->
+			lager:error("remove_port mnesia transaction exit, reason: ~p~n", [Reason]),
+			{stop, badtransaction, State};
+		ok ->
+			{noreply, State}
+	end;
+	
+
+handle_cast({write_traffic, Traffic=#traffic{time=Timestamp,
+						port=Port, down=Down, up=Up}}, State) ->						
+	InsertFunc = 
+		fun() ->
+			Date = get_datestring(Timestamp),
+			Key = gen_counterkey(Timestamp, Port),
+			mnesia:write(traffic, Traffic, write),
+			case mnesia:match_object(traffic_counter4day, #traffic_counter4day{id=Key, _='_'}, read) of
+				[] ->
+					TD = #traffic_counter4day{id=Key, date=Date, port=Port, down=Down, up=Up},
+					mnesia:write(traffic_counter4day, TD, write);
+				[Already=#traffic_counter4day{down=HadDown, up=HadUp}] ->
+					NewCounter = Already#traffic_counter4day{down=HadDown+Down, up=HadUp+Up},
+					mnesia:write(traffic_counter4day, NewCounter, write)
+			end
+		end,
+	
+	case catch mnesia:activity(transaction, InsertFunc) of
+		{'EXIT', Reason} ->
+			lager:error("write_traffic mnesia transaction exit, reason: ~p~n", [Reason]),
+			{stop, badtransaction, State};
+		ok ->
+			{noreply, State}
+	end;
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -208,3 +232,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%===================================================================
 %% Internal function
 %%===================================================================
+gen_counterkey(Timestamp, Port) ->
+	lists:concat([get_datestring(Timestamp), "@", Port]).
+	
+get_datestring(Timestamp) ->
+	{{Year, Month, Day}, _} = sserl_utils:timestamp_to_datetime(Timestamp),
+	lists:flatten(
+		io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Month, Day])).
+
+	

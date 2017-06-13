@@ -27,26 +27,27 @@
 
 -define(TCP_OPTS, [binary, {packet, raw}, {active, once},{nodelay, true}]).
 
-
+%% FIXME: 需要给每一个连接加上全局的唯一标示, 方便存入数据库
 -record(state, {
-          csocket,
-          ssocket,
-          source = undefined,
-          target = undefined,
-          ota,
-          port,
-          down = 0,
-          up   = 0,
-          sending = 0,
-          ota_data = <<>>,
-          ota_len = 2,
-          ota_id = 0,
-          ota_iv = <<>>,
-          type = server,
-          cipher_info,
-          c2s_handler=undefined,
-          s2c_handler=undefined
-         }).
+            conn_id,                        % 全局的唯一标示, 方便存入数据库
+            csocket,
+            ssocket,
+            source = undefined,
+            target = undefined,
+            ota,
+            port,
+            down = 0,
+            up   = 0,
+            sending = 0,
+            ota_data = <<>>,
+            ota_len = 2,
+            ota_id = 0,
+            ota_iv = <<>>,
+            type = server,
+            cipher_info,
+            c2s_handler=undefined,
+            s2c_handler=undefined
+        }).
 
 
 %%%===================================================================
@@ -69,7 +70,8 @@ init(Socket, {Port, Server, OTA, Type, {Method,Password}}) ->
     wait_socket(Socket),
     Cipher = shadowsocks_crypt:init_cipher_info(Method, Password),
     {ok, Source} = inet:peername(Socket),
-    State = #state{csocket=Socket, ssocket=undefined, 
+    State = #state{conn_id=sserl_utils:gen_randnum(),
+                   csocket=Socket, ssocket=undefined, 
                    ota=OTA, port=Port, type=Type,
                    source = Source,
                    target = Server,
@@ -208,9 +210,10 @@ handle_info({tcp_closed, CSocket}, State = #state{csocket=CSocket}) ->
 handle_info({tcp_closed, SSocket}, State = #state{ssocket=SSocket}) ->
     {noreply, State#state{ssocket=undefined}};
 %% report flow
-handle_info(report_flow, State = #state{port=Port, source=Source, target=Target, 
+handle_info(report_flow, State = #state{conn_id=ConnId, port=Port, source=Source, target=Target, 
                                         down=Down, up=Up}) when Down + Up >= ?REPORT_MIN ->
-    Traffic = #traffic{port=Port, source=Source, target=Target, down=Down, up=Up},
+    
+    Traffic = #traffic{id=ConnId, port=Port, source=Source, target=Target, down=Down, up=Up, time=sserl_utils:timestamp()},
     gen_event:notify(?TRAFFIC_EVENT, {sending, Traffic}),
     erlang:send_after(?REPORT_INTERVAL, self(), report_flow),
     {noreply, State#state{down=0, up=0}};
@@ -240,9 +243,9 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State = #state{port=Port, source=Source, target=Target,
+terminate(_Reason, _State = #state{conn_id=ConnId, port=Port, source=Source, target=Target,
                                   down=Down, up=Up}) ->
-    Traffic = #traffic{port=Port, source=Source, target=Target, down=Down, up=Up},
+    Traffic = #traffic{id=ConnId, port=Port, source=Source, target=Target, down=Down, up=Up, time=sserl_utils:timestamp()},
     gen_event:notify(?TRAFFIC_EVENT, {complete, Traffic}),
     ok.
 

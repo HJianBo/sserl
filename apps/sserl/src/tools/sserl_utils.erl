@@ -1,6 +1,6 @@
 -module (sserl_utils).
 
--export([record_to_proplist/2, trim/1]).
+-export([record_to_proplist/2, trim/1, timestamp/0, gen_randnum/0]).
 
 
 %% @spec record_to_proplist(Record, Fields) -> proplist()
@@ -22,8 +22,12 @@ trim(S) ->
     re:replace(S, "(^\\s+)|(\\s+$)", "", [global, {return, list}]).
 
 timestamp() ->
-    {T1, T2, T3} = timestamp(),
+    {T1, T2, T3} = erlang:timestamp(),
     % s
-    % T1*1000000+T2+T3/1000000.
+    T1*1000000+T2+T3/1000000.
     % ms
-    T1*1000000000+T2*1000+T3/1000.
+    % T1*1000000000+T2*1000+T3/1000.
+
+gen_randnum() ->
+    erlang:list_to_integer(lists:concat(erlang:binary_to_list(crypto:strong_rand_bytes(5)))).
+    

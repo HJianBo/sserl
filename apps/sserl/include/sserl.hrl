@@ -14,7 +14,7 @@
 				   %ip = {0,0,0,0},			% [optional] listen ip
 				   server					% [optional] shadowsocks server (client only)
 				   }).
-% rd(traffic, {port,source,target,down,up,time}).
+% rd(traffic, {id, port,source,target,down,up,time}).
 -record(traffic, {id,			% id = pid+timestamp
 				  port, 
                   source,

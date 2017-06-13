@@ -25,6 +25,8 @@
 -record(state, {}).
 
 
+%% FIXME: storage should not be a gen_server
+
 %%===================================================================
 %% API
 %%===================================================================
@@ -89,11 +91,11 @@ init([]) ->
     mnesia:create_table(portinfo,
                         [{attributes, record_info(fields, portinfo)}, 
                          {disc_copies, [node()]},
-						 {type, set}]),
+						 {type, bag}]),
     mnesia:create_table(traffic,
                         [{attributes, record_info(fields, traffic)},
                          {disc_copies, [node()]},
-						 {type, set}]),
+						 {type, bag}]),
 	
 	{ok, #state{}}.
 	% case filelib:ensure_dir(?DATA_PORT_FILE) of

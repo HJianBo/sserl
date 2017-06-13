@@ -47,7 +47,7 @@ init([]) ->
 	case application:get_env(traffic_enable) of
 		{ok, true} ->
 			%% 2. setup/init ets/dets/mnesia
-			ets:new(?FLOW_TRAFFIC_TAB, [named_table, {keypos, 3}]),
+			ets:new(?FLOW_TRAFFIC_TAB, [named_table, {keypos, 2}]),
 			lager:debug("initialized sserl_traffic"),
 			{ok, #state{}};
 		_ ->
@@ -72,10 +72,10 @@ handle_event({sending, Traffic}, State) ->
 	saveto_ets(Traffic),
 	{ok, State};
 
-handle_event({complete, Traffic=#traffic{port=Port}}, State) ->
+handle_event({complete, Traffic=#traffic{id=ConnId, port=Port}}, State) ->
 	lager:debug("report end traffic ~p traffic: ~p~n", [Port, Traffic]),
 	saveto_ets(Traffic),
-	self() ! {save, Port},
+	self() ! {save, ConnId},
 	{ok, State};
 
 handle_event(Event, State) ->
@@ -113,12 +113,12 @@ handle_call(_Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info({save, Port}, State) ->
-	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+handle_info({save, ConnId}, State) ->
+	case ets:lookup(?FLOW_TRAFFIC_TAB, ConnId) of
 		[Traffic] ->
 			saveto_mnesia(Traffic),
 			% delete
-			ets:delete(?FLOW_TRAFFIC_TAB, Port);
+			ets:delete(?FLOW_TRAFFIC_TAB, ConnId);
 		_ ->
 			ok
 	end,
@@ -158,8 +158,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%===================================================================
 %% Internel function
 %%===================================================================
-saveto_ets(TrafficSlice=#traffic{port=Port}) ->
-	case ets:lookup(?FLOW_TRAFFIC_TAB, Port) of
+saveto_ets(TrafficSlice=#traffic{id=ConnId, port=Port}) ->
+	case ets:lookup(?FLOW_TRAFFIC_TAB, ConnId) of
 		[] ->
 			ets:insert(?FLOW_TRAFFIC_TAB, TrafficSlice);
 		[HadTraffic] ->
@@ -172,8 +172,3 @@ saveto_mnesia(Traffic) ->
 	% save to mnesia
 	lager:debug("save traffic to mnesia: ~p~n", [Traffic]),
 	sserl_storage:write_traffic(Traffic).
-
-% do_swap(Port, D, U) ->
-% 	sserl_storage:incrs_traffic(Port, D, U).
-
-

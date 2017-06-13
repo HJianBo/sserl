@@ -83,6 +83,7 @@ write_traffic(Traffic) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+	lager:debug("sserl_storage init-------------------------"),
 	mnesia:create_schema([node()]),
     mnesia:start(),
     mnesia:create_table(portinfo,
@@ -99,7 +100,7 @@ init([]) ->
                         [{attributes, record_info(fields, traffic)},
                          {disc_copies, [node()]},
 						 {type, bag}]),
-	
+	lager:debug("sserl_storage init ok-----------------------"),
 	{ok, #state{}}.
 
 %%--------------------------------------------------------------------

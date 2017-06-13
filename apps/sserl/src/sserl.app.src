@@ -8,8 +8,7 @@
     stdlib,
     mysql_poolboy,
     lager,
-    jsx,
-    mnesia
+    jsx
    ]},
   {env,[]},
   {modules, [sserl_manager, sserl_listener, sserl_conn, sserl_listener_sup]},

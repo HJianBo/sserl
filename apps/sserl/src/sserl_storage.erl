@@ -83,25 +83,31 @@ write_traffic(Traffic) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-	lager:debug("sserl_storage init-------------------------"),
+	% some opertion will return 'already_exists', when had created table or schema
+	% now, igore this error
 	mnesia:create_schema([node()]),
     mnesia:start(),
     mnesia:create_table(portinfo,
                         [{attributes, record_info(fields, portinfo)}, 
                          {disc_copies, [node()]},
 						 {type, set}]),
-
 	mnesia:create_table(traffic_counter4day,
                         [{attributes, record_info(fields, traffic_counter4day)}, 
                          {disc_copies, [node()]},
 						 {type, set}]),
-
+	
     mnesia:create_table(traffic,
                         [{attributes, record_info(fields, traffic)},
                          {disc_copies, [node()]},
 						 {type, bag}]),
-	lager:debug("sserl_storage init ok-----------------------"),
-	{ok, #state{}}.
+	
+	% Applications need to wait for certain tables to be accessible to do useful work
+	case mnesia:wait_for_tables([portinfo, traffic, traffic_counter4day], 5000) of
+		ok ->
+			{ok, #state{}};
+		_ ->
+			{stop, mnesia_not_working}
+	end.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -169,6 +169,4 @@ saveto_ets(TrafficSlice=#traffic{id=ConnId, port=Port}) ->
 	end.
 
 saveto_mnesia(Traffic) ->
-	% save to mnesia
-	lager:debug("save traffic to mnesia: ~p~n", [Traffic]),
 	sserl_storage:write_traffic(Traffic).

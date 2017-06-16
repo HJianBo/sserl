@@ -25,7 +25,7 @@ trim(S) ->
 
 % 返回时间戳(单位: 秒)
 timestamp() ->
-    {T1, T2, T3} = erlang:timestamp(),
+    {T1, T2, _T3} = erlang:timestamp(),
     T1*1000000+T2.
 
 % 返回时间戳(单位: 毫秒)

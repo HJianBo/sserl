@@ -13,6 +13,8 @@
 %% API
 -export([start_link/1, get_port/1, get_portinfo/1, update/2, get_states/1]).
 
+-export([flow_limit_allow/1]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -171,19 +173,21 @@ handle_call(get_portinfo, _From, State=#state{port_info=PortInfo}) ->
 
 %% update args
 handle_call({update, Args}, _From, State) ->
-    PortInfo = State#state.port_info,
+    PortInfo   = State#state.port_info,
     ConnLimit  = proplists:get_value(conn_limit,  Args, PortInfo#portinfo.conn_limit),
+    MaxFlow    = proplists:get_value(max_flow, Args, PortInfo#portinfo.max_flow),
     ExpireTime = proplists:get_value(expire_time, Args, PortInfo#portinfo.expire_time),
-    Password  = proplists:get_value(password, Args, PortInfo#portinfo.password),
+    Password   = proplists:get_value(password, Args, PortInfo#portinfo.password),
     Method     = parse_method(proplists:get_value(method, Args, PortInfo#portinfo.method)),    
     %% reset expire timer
     erlang:cancel_timer(State#state.expire_timer, []),
     ExpireTimer = erlang:start_timer(max_time(ExpireTime), self(), expire, [{abs,true}]),
 
-    PortInf2 = PortInfo#portinfo{conn_limit = ConnLimit,
+    PortInf2 = PortInfo#portinfo{conn_limit  = ConnLimit,
+                                 max_flow    = MaxFlow,
                                  expire_time = ExpireTime,
-                                 password = Password,
-                                 method = Method},
+                                 password    = Password,
+                                 method      = Method},
     gen_event:notify(?STAT_EVENT, {listener, {update, PortInf2}}),
     {reply, ok, State#state{port_info = PortInf2,
                             expire_timer=ExpireTimer
@@ -234,10 +238,10 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
 
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {CAddr, CPort}} = inet:peername(CSocket),
-
-    % 这里做鉴权判断, 通过 conns 里面的 IP 地址进行区分
-    case conn_limit_allow(PortInfo, Conns, CAddr) of
-        false ->
+    
+    % access controll
+    case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo)} of
+        {false, _} ->
             lager:notice("~p will accept ~p, but beyond conn limit~n", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
@@ -246,7 +250,16 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                 {error, Ref} ->
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
-        true ->
+        {_, false} ->
+            lager:notice("~p will accept ~p, but beyond flow limit~n", [Port, CAddr]),
+            gen_tcp:close(CSocket),
+            case prim_inet:async_accept(State#state.lsocket, -1) of
+                {ok, _} ->
+                    {noreply, State};
+                {error, Ref} ->
+                    {stop, {async_accept, inet:format_error(Ref)}, State}
+            end;
+        {true, true} ->
             gen_event:notify(?STAT_EVENT, {listener, {accept, Port, {CAddr, CPort}}}),
 
             {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
@@ -343,3 +356,27 @@ conn_limit_allow(PortInfo, Conns, NewAddr) ->
     % 当已经在服务中的 Client, 返回 true;
     % 当未在服务中的 Client, 判断连接数;
     IsContain orelse maps:size(ConnectMap) < PortInfo#portinfo.conn_limit.
+
+%% Return :: bool()
+flow_limit_allow(PortInfo) ->
+    % 查询 mnesia traffic_counter4day 表, 将本月每天的用量相加
+    {{Year, Mon, _}, _} = calendar:universal_time(),
+    DayMax = calendar:last_day_of_the_month(Year, Mon),
+    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
+
+    DateMax = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
+    DateMin = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
+    
+    MatchHead = #traffic_counter4day{port=PortInfo#portinfo.port, date='$1', _='_'},
+    Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
+    TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),
+    
+    FunCount = 
+        fun(#traffic_counter4day{down=Down, up=Up}, Count) ->
+            Count+Down+Up
+        end,
+    FlowTotal = lists:foldl(FunCount, 0, TCs),
+    lager:debug("now used flow total ~p~n", [FlowTotal]),
+    PortInfo#portinfo.max_flow > FlowTotal.

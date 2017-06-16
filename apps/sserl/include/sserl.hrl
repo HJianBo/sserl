@@ -2,13 +2,13 @@
 %% 
 %% -define(FLOW_EVENT, sserl_flow_event).
 
-% rd(portinfo, {port,password,method,expire_time,conn_limit,max_flow,ota,type,server})
+% rd(portinfo, {port,password,method,expire_time,conn_limit,max_flow,ota,type,server}).
 -record(portinfo, {port,					% shadowsocks port
 				   password,				% shadowsocks password
 				   method = "rc4-md5",		% default encrypt method
 				   expire_time,				% [optional] server must disable port when expired
 				   conn_limit = 1,			% [require ] supported max connection for port
-				   max_flow = 10*1024*1024,	% [optional] 
+				   max_flow = 100*1024*1024,% [optional] 
 				   ota 	= false,			% [require ]
 				   type = server,			% [require ] server / client
 				   %ip = {0,0,0,0},			% [optional] listen ip

@@ -165,7 +165,7 @@ saveto_ets(TrafficSlice=#traffic{id=ConnId, port=Port}) ->
 		[HadTraffic] ->
 			Download = HadTraffic#traffic.down,
 			Upload = HadTraffic#traffic.up,
-			ets:update_counter(?FLOW_TRAFFIC_TAB, Port, [{6, Download}, {7, Upload}])
+			ets:update_counter(?FLOW_TRAFFIC_TAB, ConnId, [{6, Download}, {7, Upload}])
 	end.
 
 saveto_mnesia(Traffic) ->

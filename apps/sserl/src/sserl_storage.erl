@@ -149,18 +149,24 @@ handle_cast({add_port, PortInfo}, State) ->
 handle_cast({remove_port, Port}, State) ->
 	lager:debug("storage remove port: ~p~n", [Port]),
 
-	DelTraffic = 
+	DelPort = 
 		fun() ->
 			mnesia:delete(portinfo, Port, write),
-			DelFunc = 
+			DelTra = 
 				fun(Traffic) -> 
 					mnesia:delete_object(traffic, Traffic, write)
 				end,
+			DelTraC =
+				fun(TC) ->
+					mnesia:delete_object(traffic_counter4day, TC, write)
+				end,
 
-			All = mnesia:match_object(traffic, #traffic{port=Port, _='_'}, read),
-			lists:foreach(DelFunc, All)
+			AllTra  = mnesia:match_object(traffic, #traffic{port=Port, _='_'}, read),
+			AllTraC = mnesia:match_object(traffic_counter4day, #traffic_counter4day{port=Port, _='_'}, read),
+			lists:foreach(DelTra, AllTra),
+			lists:foreach(DelTraC, AllTraC)
 		end,
-	case catch mnesia:activity(transaction, DelTraffic) of
+	case catch mnesia:activity(transaction, DelPort) of
 		{'EXIT', Reason} ->
 			lager:error("remove_port mnesia transaction exit, reason: ~p~n", [Reason]),
 			{stop, badtransaction, State};

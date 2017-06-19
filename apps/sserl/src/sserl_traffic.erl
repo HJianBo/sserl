@@ -158,7 +158,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%===================================================================
 %% Internel function
 %%===================================================================
-saveto_ets(TrafficSlice=#traffic{id=ConnId, port=Port}) ->
+saveto_ets(TrafficSlice=#traffic{id=ConnId}) ->
 	case ets:lookup(?FLOW_TRAFFIC_TAB, ConnId) of
 		[] ->
 			ets:insert(?FLOW_TRAFFIC_TAB, TrafficSlice);

@@ -6,7 +6,7 @@
 -record(portinfo, {port,					% shadowsocks port
 				   password,				% shadowsocks password
 				   method = "rc4-md5",		% default encrypt method
-				   expire_time,				% [optional] server must disable port when expired
+				   expire_time,				% [optional] server must disable port when expired, unit:second
 				   conn_limit = 1,			% [require ] supported max connection for port
 				   max_flow = 100*1024*1024,% [optional] 
 				   ota 	= false,			% [require ]

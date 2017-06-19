@@ -27,8 +27,7 @@
 -record(state, {
           lsocket,                  % listen socket
           conns = [],               % current connection list [{Pid, Addr, Port}]
-          port_info,                % portinfo()
-          expire_timer = undefined  % expire timer
+          port_info                 % portinfo()
 }).
 
 %%%===================================================================
@@ -46,13 +45,13 @@ start_link(Args) ->
     %% get configs
     Type      = proplists:get_value(type, Args, server),
     IP        = proplists:get_value(ip, Args),
-    Port     = proplists:get_value(port, Args),
+    Port      = proplists:get_value(port, Args),
     ConnLimit = proplists:get_value(conn_limit,  Args, ?MAX_LIMIT),
     ExpireTime= proplists:get_value(expire_time, Args, max_time()),
     OTA       = proplists:get_value(ota, Args, false),
     Password  = proplists:get_value(password, Args),
     Method    = parse_method(proplists:get_value(method, Args, rc4_md5)),
-    CurrTime  = os:system_time(milli_seconds),
+    CurrTime  = os:system_time(seconds),
     Server    = proplists:get_value(server, Args),
     %% validate args
     ValidMethod = lists:any(fun(M) -> M =:= Method end, shadowsocks_crypt:methods()),
@@ -140,8 +139,7 @@ init([PortInfo, IP]) ->
                 {ok, _} ->
                     gen_event:notify(?STAT_EVENT, {listener, {new, PortInfo}}),
                     {ok,#state{lsocket = LSocket,
-                               port_info = PortInfo,
-                               expire_timer=erlang:start_timer(max_time(PortInfo#portinfo.expire_time), self(), expire, [{abs,true}])
+                               port_info = PortInfo
                         }};
                 {error, Error} ->
                     {stop, Error}
@@ -179,9 +177,6 @@ handle_call({update, Args}, _From, State) ->
     ExpireTime = proplists:get_value(expire_time, Args, PortInfo#portinfo.expire_time),
     Password   = proplists:get_value(password, Args, PortInfo#portinfo.password),
     Method     = parse_method(proplists:get_value(method, Args, PortInfo#portinfo.method)),    
-    %% reset expire timer
-    erlang:cancel_timer(State#state.expire_timer, []),
-    ExpireTimer = erlang:start_timer(max_time(ExpireTime), self(), expire, [{abs,true}]),
 
     PortInf2 = PortInfo#portinfo{conn_limit  = ConnLimit,
                                  max_flow    = MaxFlow,
@@ -189,9 +184,8 @@ handle_call({update, Args}, _From, State) ->
                                  password    = Password,
                                  method      = Method},
     gen_event:notify(?STAT_EVENT, {listener, {update, PortInf2}}),
-    {reply, ok, State#state{port_info = PortInf2,
-                            expire_timer=ExpireTimer
-                           }};
+    {reply, ok, State#state{port_info = PortInf2}};
+
 handle_call(get_states, _From, State) ->
     {reply, State, State};
 
@@ -240,8 +234,8 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
     {ok, {CAddr, CPort}} = inet:peername(CSocket),
     
     % access controll
-    case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo)} of
-        {false, _} ->
+    case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo), expire_time_allow(PortInfo)} of
+        {false, _, _} ->
             lager:notice("~p will accept ~p, but beyond conn limit~n", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
@@ -250,7 +244,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                 {error, Ref} ->
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
-        {_, false} ->
+        {_, false, _} ->
             lager:notice("~p will accept ~p, but beyond flow limit~n", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
@@ -259,7 +253,16 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                 {error, Ref} ->
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
-        {true, true} ->
+        {_, _, false} ->
+            lager:notice("~p will accept ~p, but has expired~n", [Port, CAddr]),
+            gen_tcp:close(CSocket),
+            case prim_inet:async_accept(State#state.lsocket, -1) of
+                {ok, _} ->
+                    {noreply, State};
+                {error, Ref} ->
+                    {stop, {async_accept, inet:format_error(Ref)}, State}
+            end;
+        {true, true, true} ->
             gen_event:notify(?STAT_EVENT, {listener, {accept, Port, {CAddr, CPort}}}),
 
             {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
@@ -328,9 +331,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 max_time() ->
-    erlang:convert_time_unit(erlang:system_info(end_time), native, milli_seconds).
-max_time(Time) ->
-    erlang:min(Time, max_time()).
+    erlang:convert_time_unit(erlang:system_info(end_time), native, seconds).
 
 %% parse encrty method
 parse_method(Method) when is_list(Method); is_binary(Method) ->
@@ -380,3 +381,6 @@ flow_limit_allow(PortInfo) ->
     FlowTotal = lists:foldl(FunCount, 0, TCs),
     lager:debug("now used flow total ~p~n", [FlowTotal]),
     PortInfo#portinfo.max_flow > FlowTotal.
+
+expire_time_allow(PortInfo) ->
+    PortInfo#portinfo.expire_time > os:system_time(seconds).

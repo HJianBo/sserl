@@ -370,6 +370,8 @@ flow_limit_allow(PortInfo) ->
     DateMin = lists:flatten(
 		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
     
+    %% TODO: 库查询接口, 应该转移到其他文件中
+
     MatchHead = #traffic_counter4day{port=PortInfo#portinfo.port, date='$1', _='_'},
     Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
     TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),

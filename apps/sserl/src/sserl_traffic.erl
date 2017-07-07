@@ -158,13 +158,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%===================================================================
 %% Internel function
 %%===================================================================
-saveto_ets(TrafficSlice=#traffic{id=ConnId}) ->
+saveto_ets(TrafficSlice=#traffic{id=ConnId, down=Download, up=Upload}) ->
 	case ets:lookup(?FLOW_TRAFFIC_TAB, ConnId) of
 		[] ->
 			ets:insert(?FLOW_TRAFFIC_TAB, TrafficSlice);
-		[HadTraffic] ->
-			Download = HadTraffic#traffic.down,
-			Upload = HadTraffic#traffic.up,
+		[_HadTraffic] ->
 			ets:update_counter(?FLOW_TRAFFIC_TAB, ConnId, [{6, Download}, {7, Upload}])
 	end.
 

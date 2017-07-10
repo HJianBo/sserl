@@ -360,28 +360,7 @@ conn_limit_allow(PortInfo, Conns, NewAddr) ->
 
 %% Return :: bool()
 flow_limit_allow(PortInfo) ->
-    % 查询 mnesia traffic_counter4day 表, 将本月每天的用量相加
-    {{Year, Mon, _}, _} = calendar:universal_time(),
-    DayMax = calendar:last_day_of_the_month(Year, Mon),
-    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
-
-    DateMax = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
-    DateMin = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
-    
-    %% TODO: 库查询接口, 应该转移到其他文件中
-
-    MatchHead = #traffic_counter4day{port=PortInfo#portinfo.port, date='$1', _='_'},
-    Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
-    TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),
-    
-    FunCount = 
-        fun(#traffic_counter4day{down=Down, up=Up}, Count) ->
-            Count+Down+Up
-        end,
-    FlowTotal = lists:foldl(FunCount, 0, TCs),
-    lager:debug("now used flow total ~p~n", [FlowTotal]),
+    FlowTotal = sserl_traffic:flow_usage(PortInfo#portinfo.port),
     PortInfo#portinfo.max_flow > FlowTotal.
 
 expire_time_allow(PortInfo) ->

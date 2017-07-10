@@ -13,6 +13,8 @@
 %% API
 -export([add_handler/0]).
 
+-export([flow_usage/1]).
+
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
          handle_info/2, terminate/2, code_change/3]).
@@ -28,6 +30,35 @@
 add_handler() ->
 	gen_event:add_handler(?TRAFFIC_EVENT, ?MODULE, []).
 
+%% @doc return flow usage in current month
+%% Return :: integer()
+flow_usage(Port) ->
+	% 1. 查询 mnesia traffic_counter4day 表, 将本月每天的用量相加
+	% 2. 查询 ets 表, 将当前正在使用的流量相加
+	{{Year, Mon, _}, _} = calendar:universal_time(),
+    DayMax = calendar:last_day_of_the_month(Year, Mon),
+    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
+
+    DateMax = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
+    DateMin = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
+
+    MatchHead = #traffic_counter4day{port=Port, date='$1', _='_'},
+    Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
+    TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),
+    
+    FunCount = 
+        fun(#traffic_counter4day{down=Down, up=Up}, Count) ->
+            Count+Down+Up
+        end,
+    FlowTotal = lists:foldl(FunCount, 0, TCs),
+	case ets:match(?FLOW_TRAFFIC_TAB, #traffic{port=Port, _='_'}) of
+		[] ->
+			FlowTotal;
+		[ETraffics] ->
+			lists:foldl(FunCount, FlowTotal, ETraffics)
+	end.
 
 %%===================================================================
 %% gen_event callbacks

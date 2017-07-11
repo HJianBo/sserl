@@ -56,7 +56,7 @@ flow_usage(Port) ->
 	case ets:match(?FLOW_TRAFFIC_TAB, #traffic{port=Port, _='_'}) of
 		[] ->
 			FlowTotal;
-		[ETraffics] ->
+		ETraffics ->
 			lists:foldl(FunCount, FlowTotal, ETraffics)
 	end.
 

@@ -57,7 +57,9 @@ flow_usage(Port) ->
 		[] ->
 			FlowTotal;
 		ETraffics ->
-			lists:foldl(FunCount, FlowTotal, ETraffics)
+			lists:foldl(fun(#traffic{down=Down, up=Up}, Count) -> 
+				Count+Down+Up
+			end, FlowTotal, ETraffics)
 	end.
 
 %%===================================================================

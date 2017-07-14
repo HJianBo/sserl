@@ -53,7 +53,7 @@ flow_usage(Port) ->
             Count+Down+Up
         end,
     FlowTotal = lists:foldl(FunCount, 0, TCs),
-	case ets:match(?FLOW_TRAFFIC_TAB, #traffic{port=Port, _='_'}) of
+    case ets:select(?FLOW_TRAFFIC_TAB, [{#traffic{port=Port, _=''}, [], ['$_']}]) of
 		[] ->
 			FlowTotal;
 		ETraffics ->

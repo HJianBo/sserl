@@ -71,6 +71,7 @@ start_link(Args) ->
         CurrTime >= ExpireTime ->
             {error, expired};
         true ->
+            %% FIXME: 
             %% max_flow =
             %% IP
             PortInfo = #portinfo{port = Port, password = Password, method = Method,

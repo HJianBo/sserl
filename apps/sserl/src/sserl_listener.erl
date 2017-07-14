@@ -23,6 +23,7 @@
 
 -define(SERVER, ?MODULE).
 -define(MAX_LIMIT, 1024).
+-define(MAX_FLOW, 100*1024*1024).
 
 -record(state, {
           lsocket,                  % listen socket
@@ -48,6 +49,7 @@ start_link(Args) ->
     Port      = proplists:get_value(port, Args),
     ConnLimit = proplists:get_value(conn_limit,  Args, ?MAX_LIMIT),
     ExpireTime= proplists:get_value(expire_time, Args, max_time()),
+    MaxFlow   = proplists:get_value(max_flow, Args, ?MAX_FLOW),
     OTA       = proplists:get_value(ota, Args, false),
     Password  = proplists:get_value(password, Args),
     Method    = parse_method(proplists:get_value(method, Args, rc4_md5)),
@@ -71,12 +73,10 @@ start_link(Args) ->
         CurrTime >= ExpireTime ->
             {error, expired};
         true ->
-            %% FIXME: 
-            %% max_flow =
             %% IP
             PortInfo = #portinfo{port = Port, password = Password, method = Method,
                                  ota = OTA, type = Type, server = Server,
-                                 conn_limit = ConnLimit,
+                                 conn_limit = ConnLimit, max_flow = MaxFlow,
                                  expire_time=ExpireTime
                         },
             gen_server:start_link(?MODULE, [PortInfo, IP], [])

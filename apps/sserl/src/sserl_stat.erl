@@ -75,20 +75,20 @@ handle_event({listener, {stop, Port}}, State) ->
     sserl_storage:remove_port(Port),
     {ok, State};
 handle_event({listener, Event}, State) ->
-    lager:notice("listener: ~p~n", [Event]),
+    lager:notice("listener: ~p", [Event]),
     {ok, State};
 
 
 handle_event({conn, Event}, State) ->
-    lager:debug("conn: ~p~n", [Event]),
+    lager:debug("conn: ~p", [Event]),
     {ok, State};
 
 handle_event({mutil, Event}, State) ->
-    lager:debug("mutil: ~p~n", [Event]),
+    lager:debug("mutil: ~p", [Event]),
     {ok, State};
 
 handle_event(Event, State) ->
-    lager:debug("Event: ~p~n", [Event]),
+    lager:debug("Event: ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

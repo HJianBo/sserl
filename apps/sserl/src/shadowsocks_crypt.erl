@@ -24,7 +24,7 @@ init_cipher_info(Method, Password) ->
     {KeyLen, IvLen} = key_iv_len(Method),
     {Key, _NewIv} = evp_bytestokey(Password, KeyLen, IvLen),
     %% use another random Iv, but not the one returned from evp_bytestokey()
-    NewIv = crypto:rand_bytes(IvLen),
+    NewIv = crypto:strong_rand_bytes(IvLen),
     #cipher_info{method=Method, key=Key, encode_iv=NewIv, decode_iv=undefined,
                 stream_enc_state = stream_init(Method, Key, NewIv)}.
 

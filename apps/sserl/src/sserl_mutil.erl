@@ -69,7 +69,7 @@ status(Port) ->
 							false
 					end
 			   end, AllPorts),
-	lager:debug("~p~n", [TmpLists]),
+	lager:debug("~p", [TmpLists]),
 	jsx:encode(TmpLists).
 
 %%%===================================================================
@@ -234,7 +234,7 @@ handle_data({Socket, Addr, Port}, RawData) ->
 					gen_udp:send(Socket, Addr, Port, <<"remove: ", SSPort2/binary>>)
 			end;
 		{error, Reason} ->
-			lager:info("parse recved data: ~p, error: ~p~n", [RawData, Reason])
+			lager:info("parse recved data: ~p, error: ~p", [RawData, Reason])
 	end.
 
 parse_cmd(RawData) when is_binary(RawData)->

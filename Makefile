@@ -1,44 +1,52 @@
-REBAR3_URL=https://s3.amazonaws.com/rebar3/rebar3
+ERL       ?= erl
+ERLC      ?= $(ERL)c
+APP       := video_manager
 
-ifeq ($(wildcard rebar3),rebar3)
-REBAR3 = $(CURDIR)/rebar3
-endif
+REBAR := ./rebar3
+REBAR_OPTS ?=
 
-REBAR3 ?= $(shell test -e `which rebar3` 2>/dev/null && which rebar3 || echo "./rebar3")
+.PHONY: all
+all: compile
 
-ifeq ($(REBAR3),)
-REBAR3 = $(CURDIR)/rebar3
-endif
+.PHONY: rel prod-rel
+rel: 
+	$(REBAR) release
 
-.PHONY: deps test build
+prod-rel: 
+	$(REBAR) as prod tar
 
-# build test docs
-all: build
+.PHONY: shell
+shell:
+	$(REBAR) shell --name=video_manager@127.0.0.1	
 
-build: $(REBAR3)
-	@$(REBAR3) compile
+# Use Rebar to get, update and compile dependencies
+.PHONY: upgrade-deps compile-video_manager compile 
 
-$(REBAR3):
-	wget $(REBAR3_URL) || curl -Lo rebar3 $(REBAR3_URL)
-	@chmod a+x rebar3
+upgrade-deps: $(REBAR)
+	$(REBAR) $(REBAR_OPTS) upgrade
 
-deps:
-	@$(REBAR3) get-deps
+compile: $(REBAR)
+	$(REBAR) $(REBAR_OPTS) compile
 
-clean:
-	@$(REBAR3) clean
 
-distclean: clean
-	@$(REBAR3) delete-deps
-
+# Generate documentation
+.PHONY: docs edocs
 docs:
-	@$(REBAR3) edoc
+	@echo Building HTML documentation...
+	cd doc && $(MAKE) stubs && $(MAKE) html
+	@echo HTML documentation is now available in doc/_build/html/
 
-test: 
-	@$(REBAR3) do ct, cover
+edocs:
+	@echo Building reference edoc documentation...
+	bin/video_manager generate-edoc
 
-release: 
-	@$(REBAR3) release
+# Cleaning
 
-prod: 
-	@$(REBAR3) as prod tar
+.PHONY: clean
+clean:  $(REBAR)
+	rm -rf ebin
+	$(REBAR) $(REBAR_OPTS) clean
+
+.PHONY: dist-clean
+dist-clean: clean
+	$(REBAR) $(REBAR_OPTS) clean -a

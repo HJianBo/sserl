@@ -16,6 +16,8 @@
 %% API
 -export([start_link/0, add_port/1, remove_port/1, all_ports/0, write_traffic/1]).
 
+-export([current_month_usage/1]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -60,12 +62,54 @@ remove_port(Port) ->
 
 %% Return :: [portinfo()]
 all_ports() ->
-	gen_server:call(?SERVER, ports).
+	mnesia:dirty_match_object(portinfo, #portinfo{_='_'}).
 
-write_traffic(Traffic) ->
-	lager:debug("write traffic~p~n", [Traffic]),
-	gen_server:cast(?SERVER, {write_traffic, Traffic}).
+%% @doc write traffic to storage
+write_traffic(Traffic=#traffic{time=Timestamp, port=Port, down=Down, up=Up}) ->						
+	lager:debug("write traffic: ~p", [Traffic]),
+	InsertFunc = 
+		fun() ->
+			Date = get_datestring(Timestamp),
+			Key = gen_counterkey(Timestamp, Port),
+			mnesia:write(traffic, Traffic, write),
+			case mnesia:match_object(traffic_counter4day, #traffic_counter4day{id=Key, _='_'}, read) of
+				[] ->
+					TD = #traffic_counter4day{id=Key, date=Date, port=Port, down=Down, up=Up},
+					mnesia:write(traffic_counter4day, TD, write);
+				[Already=#traffic_counter4day{down=HadDown, up=HadUp}] ->
+					NewCounter = Already#traffic_counter4day{down=HadDown+Down, up=HadUp+Up},
+					mnesia:write(traffic_counter4day, NewCounter, write)
+			end
+		end,
+	
+	case catch mnesia:activity(transaction, InsertFunc) of
+		{'EXIT', Reason} ->
+			lager:error("write_traffic mnesia transaction exit, reason: ~p~n", [Reason]),
+			gen_server:stop(?SERVER, badtransaction, 1000);
+		ok -> ok
+	end.
 
+%% @doc select total flow usage in current month
+%% Return :: integer()
+current_month_usage(Port) ->
+	{{Year, Mon, _}, _} = calendar:universal_time(),
+    DayMax = calendar:last_day_of_the_month(Year, Mon),
+    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
+
+    DateMax = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
+    DateMin = lists:flatten(
+		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
+
+    MatchHead = #traffic_counter4day{port=Port, date='$1', _='_'},
+    Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
+    TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),
+    
+    FunCount = 
+        fun(#traffic_counter4day{down=Down, up=Up}, Count) ->
+            Count+Down+Up
+        end,
+    lists:foldl(FunCount, 0, TCs).
 
 %%===================================================================
 %% gen_server callbacks
@@ -123,10 +167,6 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------	
-handle_call(ports, _From, State) ->
-	lager:debug("storage get all ports~n"),
-	Reply = mnesia:dirty_match_object(portinfo, #portinfo{_='_'}),
-    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
 	Reply = ok,
     {reply, Reply, State}.
@@ -174,32 +214,6 @@ handle_cast({remove_port, Port}, State) ->
 			{noreply, State}
 	end;
 	
-
-handle_cast({write_traffic, Traffic=#traffic{time=Timestamp,
-						port=Port, down=Down, up=Up}}, State) ->						
-	InsertFunc = 
-		fun() ->
-			Date = get_datestring(Timestamp),
-			Key = gen_counterkey(Timestamp, Port),
-			mnesia:write(traffic, Traffic, write),
-			case mnesia:match_object(traffic_counter4day, #traffic_counter4day{id=Key, _='_'}, read) of
-				[] ->
-					TD = #traffic_counter4day{id=Key, date=Date, port=Port, down=Down, up=Up},
-					mnesia:write(traffic_counter4day, TD, write);
-				[Already=#traffic_counter4day{down=HadDown, up=HadUp}] ->
-					NewCounter = Already#traffic_counter4day{down=HadDown+Down, up=HadUp+Up},
-					mnesia:write(traffic_counter4day, NewCounter, write)
-			end
-		end,
-	
-	case catch mnesia:activity(transaction, InsertFunc) of
-		{'EXIT', Reason} ->
-			lager:error("write_traffic mnesia transaction exit, reason: ~p~n", [Reason]),
-			{stop, badtransaction, State};
-		ok ->
-			{noreply, State}
-	end;
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

@@ -237,7 +237,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
     % access controll
     case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo), expire_time_allow(PortInfo)} of
         {false, _, _} ->
-            lager:notice("~p will accept ~p, but beyond conn limit~n", [Port, CAddr]),
+            lager:notice("~p will accept ~p, but beyond conn limit", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
                 {ok, _} ->
@@ -246,7 +246,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
         {_, false, _} ->
-            lager:notice("~p will accept ~p, but beyond flow limit~n", [Port, CAddr]),
+            lager:notice("~p will accept ~p, but beyond flow limit", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
                 {ok, _} ->
@@ -255,7 +255,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
                     {stop, {async_accept, inet:format_error(Ref)}, State}
             end;
         {_, _, false} ->
-            lager:notice("~p will accept ~p, but has expired~n", [Port, CAddr]),
+            lager:notice("~p will accept ~p, but has expired", [Port, CAddr]),
             gen_tcp:close(CSocket),
             case prim_inet:async_accept(State#state.lsocket, -1) of
                 {ok, _} ->

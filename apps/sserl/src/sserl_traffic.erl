@@ -34,32 +34,15 @@ add_handler() ->
 %% Return :: integer()
 flow_usage(Port) ->
 	% 1. 查询 mnesia traffic_counter4day 表, 将本月每天的用量相加
-	% 2. 查询 ets 表, 将当前正在使用的流量相加
-	{{Year, Mon, _}, _} = calendar:universal_time(),
-    DayMax = calendar:last_day_of_the_month(Year, Mon),
-    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
-
-    DateMax = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
-    DateMin = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
-
-    MatchHead = #traffic_counter4day{port=Port, date='$1', _='_'},
-    Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
-    TCs = mnesia:dirty_select(traffic_counter4day, [{MatchHead, Guards, ['$_']}]),
-    
-    FunCount = 
-        fun(#traffic_counter4day{down=Down, up=Up}, Count) ->
-            Count+Down+Up
-        end,
-    FlowTotal = lists:foldl(FunCount, 0, TCs),
+	% 2. 查询 ets 表, 将当前正在使用的流量相加	
+	FlowSaved = sserl_storage:current_month_usage(Port),
     case ets:select(?FLOW_TRAFFIC_TAB, [{#traffic{port=Port, _=''}, [], ['$_']}]) of
 		[] ->
-			FlowTotal;
+			FlowSaved;
 		ETraffics ->
 			lists:foldl(fun(#traffic{down=Down, up=Up}, Count) -> 
 				Count+Down+Up
-			end, FlowTotal, ETraffics)
+			end, FlowSaved, ETraffics)
 	end.
 
 %%===================================================================
@@ -101,18 +84,18 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_event({sending, Traffic}, State) ->
-	lager:debug("report sending traffic ~p traffic: ~p~n", [Traffic#traffic.port, Traffic]),
+	lager:debug("report sending traffic ~p traffic: ~p", [Traffic#traffic.port, Traffic]),
 	saveto_ets(Traffic),
 	{ok, State};
 
 handle_event({complete, Traffic=#traffic{id=ConnId, port=Port}}, State) ->
-	lager:debug("report end traffic ~p traffic: ~p~n", [Port, Traffic]),
+	lager:debug("report end traffic ~p traffic: ~p", [Port, Traffic]),
 	saveto_ets(Traffic),
 	self() ! {save, ConnId},
 	{ok, State};
 
 handle_event(Event, State) ->
-	lager:debug("unexpected event ~p~n", [Event]),
+	lager:debug("unexpected event ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

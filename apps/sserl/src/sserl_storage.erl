@@ -84,7 +84,7 @@ write_traffic(Traffic=#traffic{time=Timestamp, port=Port, down=Down, up=Up}) ->
 	
 	case catch mnesia:activity(transaction, InsertFunc) of
 		{'EXIT', Reason} ->
-			lager:error("write_traffic mnesia transaction exit, reason: ~p~n", [Reason]),
+			lager:error("write_traffic mnesia transaction exit, reason: ~p", [Reason]),
 			gen_server:stop(?SERVER, badtransaction, 1000);
 		ok -> ok
 	end.
@@ -182,12 +182,12 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({add_port, PortInfo}, State) -> 
-	lager:debug("storage add port: ~p~n", [PortInfo]),
+	lager:debug("storage add port: ~p", [PortInfo]),
 	mnesia:dirty_write(portinfo, PortInfo),
 	{noreply, State};
 
 handle_cast({remove_port, Port}, State) ->
-	lager:debug("storage remove port: ~p~n", [Port]),
+	lager:debug("storage remove port: ~p", [Port]),
 
 	DelPort = 
 		fun() ->
@@ -208,7 +208,7 @@ handle_cast({remove_port, Port}, State) ->
 		end,
 	case catch mnesia:activity(transaction, DelPort) of
 		{'EXIT', Reason} ->
-			lager:error("remove_port mnesia transaction exit, reason: ~p~n", [Reason]),
+			lager:error("remove_port mnesia transaction exit, reason: ~p", [Reason]),
 			{stop, badtransaction, State};
 		ok ->
 			{noreply, State}

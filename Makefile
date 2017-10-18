@@ -1,6 +1,6 @@
 ERL       ?= erl
 ERLC      ?= $(ERL)c
-APP       := video_manager
+APP       := sserl
 
 REBAR := ./rebar3
 REBAR_OPTS ?=
@@ -17,10 +17,10 @@ prod-rel:
 
 .PHONY: shell
 shell:
-	$(REBAR) shell --name=video_manager@127.0.0.1	
+	$(REBAR) shell --name=$(APP)@127.0.0.1	
 
 # Use Rebar to get, update and compile dependencies
-.PHONY: upgrade-deps compile-video_manager compile 
+.PHONY: upgrade-deps compile-$(APP) compile 
 
 upgrade-deps: $(REBAR)
 	$(REBAR) $(REBAR_OPTS) upgrade
@@ -38,7 +38,7 @@ docs:
 
 edocs:
 	@echo Building reference edoc documentation...
-	bin/video_manager generate-edoc
+	bin/$(APP) generate-edoc
 
 # Cleaning
 

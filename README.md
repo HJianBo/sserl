@@ -7,7 +7,7 @@ Shadowsocks for erlang port, **sserl** is Erlang/OTP Application build with reba
 - Mutil-User/Port Manager Interface Support
 - Traffic Statistics and Limit
 - Max Connection Count limit on port
-
+- Support rc4_md5, aes_128_cfb, aes_192_cfb, aes_256_cfb
 # Usage
 ## By Production .tar
 ```shell

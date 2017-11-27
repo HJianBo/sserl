@@ -30,3 +30,5 @@ Configuration file path: `./releases/x.y.z/sys.config`
 - Dashboard?
 - Configuration file compile with `cuttlefish`
 - Support cluster
+- Support start service on boot?
+- Support CLI?

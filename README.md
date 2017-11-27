@@ -32,3 +32,6 @@ Configuration file path: `./releases/x.y.z/sys.config`
 - Support cluster
 - Support start service on boot?
 - Support CLI?
+- Socket每次流量上报时, 需要判断是否超限制然后断开连接
+- Mutil-Manager 的数据接口是否需要加密
+

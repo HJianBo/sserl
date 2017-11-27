@@ -29,4 +29,6 @@ Configuration file path: `./releases/x.y.z/sys.config`
 # TODOs
 - Socket每次流量上报时, 需要判断是否超限制然后断开连接
 - Mutil-Manager 的数据接口是否需要加密
-
+- Dashboard?
+- Configuration file compile with `cuttlefish`
+- Support cluster

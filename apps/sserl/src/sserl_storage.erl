@@ -142,7 +142,7 @@ init([]) ->
 	
     mnesia:create_table(traffic,
                         [{attributes, record_info(fields, traffic)},
-                         {disc_copies, [node()]},
+                         {disc_only_copies, [node()]},
 						 {type, bag}]),
 	
 	% Applications need to wait for certain tables to be accessible to do useful work

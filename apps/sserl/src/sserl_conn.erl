@@ -90,6 +90,7 @@ init_proto(State=#state{type=server,csocket=CSocket}) ->
             erlang:send_after(?REPORT_INTERVAL, self(), report_flow),
             gen_server:enter_loop(?MODULE, [], init_handler(State2#state{ssocket=SSocket,target={Addr,Port}}));
         {error, Reason} ->
+            lager:error("conn init failed, state: ~p, reason: ~p~n", [State, Reason]),
             exit(Reason)
     end;
 

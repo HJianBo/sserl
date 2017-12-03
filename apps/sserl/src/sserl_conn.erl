@@ -27,7 +27,6 @@
 
 -define(TCP_OPTS, [binary, {packet, raw}, {active, once},{nodelay, true}]).
 
-%% FIXME: 需要给每一个连接加上全局的唯一标示, 方便存入数据库
 -record(state, {
             conn_id,                        % 全局的唯一标示, 方便存入数据库
             csocket,
@@ -370,7 +369,8 @@ recv_target(State) ->
                 <<Domain:DomLen/binary, DestPort:16/big>> = Data2,
                 {[DomLen,Data2], binary_to_list(Domain), DestPort, Data3, State3};
             _ ->
-                throw({error_address_type, AddrType})
+                lager:error("error_address_type ~p", [AddrType]),
+                exit({error_address_type, AddrType})
         end,
     case {?IS_OTA(AddrType), NewState#state.ota} of
         {true, _} ->

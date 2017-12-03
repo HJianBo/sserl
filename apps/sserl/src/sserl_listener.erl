@@ -366,3 +366,4 @@ flow_limit_allow(PortInfo) ->
 
 expire_time_allow(PortInfo) ->
     PortInfo#portinfo.expire_time > os:system_time(seconds).
+

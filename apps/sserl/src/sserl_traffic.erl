@@ -33,8 +33,6 @@ add_handler() ->
 %% @doc return flow usage in current month
 %% Return :: integer()
 flow_usage(Port) ->
-	% 1. 查询 mnesia traffic_counter4day 表, 将本月每天的用量相加
-	% 2. 查询 ets 表, 将当前正在使用的流量相加	
 	FlowSaved = sserl_storage:current_month_usage(Port),
     case ets:select(?FLOW_TRAFFIC_TAB, [{#traffic{port=Port, _=''}, [], ['$_']}]) of
 		[] ->

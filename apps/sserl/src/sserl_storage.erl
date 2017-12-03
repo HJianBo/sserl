@@ -26,9 +26,6 @@
 
 -record(state, {}).
 
-
-%% FIXME: storage should not be a gen_server
-
 %%===================================================================
 %% API
 %%===================================================================
@@ -267,4 +264,3 @@ get_datestring(Timestamp) ->
 	lists:flatten(
 		io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Month, Day])).
 
-	

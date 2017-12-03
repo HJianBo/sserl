@@ -27,3 +27,4 @@ traffic() ->
 traffic(Port) ->
 	Traffics = mnesia:dirty_match_object(traffic, #traffic{port=Port, _='_'}),
 	io:format("traffic for  ~p, ~p records~n", [Port, length(Traffics)]).
+

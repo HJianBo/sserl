@@ -136,29 +136,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
 load_local_ports() ->
-    lists:map(fun(C) ->
-                case sserl_listener_sup:start(C) of
-                  {ok, _} ->
-                      ok;
-                  E ->
-                      throw(E)
-                  end
-              end, application:get_env(sserl, listener, [])),
-    ok.
-
+    lists:map(fun start_listeners/1, application:get_env(sserl, listener, [])), ok.
 
 load_storage_ports() ->
   Func = fun(PortInfo) ->
-      PortArgs = sserl_utils:record_to_proplist(PortInfo, record_info(fields, portinfo)),
-      case sserl_listener_sup:start(PortArgs) of
-          {ok, _} ->
-              ok;
-          E ->
-              throw(E)
-      end
-  end,
-  lists:map(Func, sserl_storage:all_ports()),
-  ok.
+             Conf = sserl_utils:record_to_proplist(PortInfo, record_info(fields, portinfo)),
+             start_listeners(Conf)
+         end,
+  lists:map(Func, sserl_storage:all_ports()), ok.
+
+start_listeners(Conf) ->
+    case sserl_listener_sup:start(Conf) of
+        {ok, _} -> ok;
+        E       -> throw(E)
+    end.
 

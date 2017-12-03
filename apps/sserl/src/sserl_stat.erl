@@ -68,14 +68,21 @@ init([]) ->
 handle_event({listener, {new, PortInfo}}, State) ->
     sserl_storage:add_port(PortInfo),
     {ok, State};
+
 handle_event({listener, {update, PortInfo}}, State) ->
     sserl_storage:add_port(PortInfo),
     {ok, State};
+
 handle_event({listener, {stop, Port}}, State) ->
     sserl_storage:remove_port(Port),
     {ok, State};
+
+handle_event({listener, {accept, Port, {CHost, CPort}}}, State) ->
+    lager:notice("listner ~w accepted ~s:~w", [Port, inet:ntoa(CHost), CPort]),
+    {ok, State};
+
 handle_event({listener, Event}, State) ->
-    lager:notice("listener: ~p", [Event]),
+    lager:warning("unexcepted event: {listener, ~p}", [Event]),
     {ok, State};
 
 

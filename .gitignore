@@ -17,4 +17,5 @@ logs
 _build
 .idea
 rebar3.crashdump
+rebar.lock
 data

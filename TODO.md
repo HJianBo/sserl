@@ -16,3 +16,11 @@
 - sserl client 支持
 - 修改为依赖 esockd
 
+
+## Plan
+
+esockd --> launch logic --> 0.4.0
+
+auth, traffic report --> hooks --> 0.5.0
+
+culltefish --> 0.6.0

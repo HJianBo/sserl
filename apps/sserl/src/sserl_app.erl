@@ -1,8 +1,7 @@
 %%%-------------------------------------------------------------------
-%% @doc sserl public API
+%% @doc sserl Application
 %% @end
 %%%-------------------------------------------------------------------
-
 -module(sserl_app).
 
 -behaviour(application).
@@ -15,14 +14,9 @@
 %%====================================================================
 
 start(_StartType, _StartArgs) ->
-    case sserl_sup:start_link() of
-        {ok, Pid} ->
-            {ok, Pid};
-        Error ->
-            Error
-    end.
+    sserl_sup:start_link().
 
-%%--------------------------------------------------------------------
+
 stop(_State) ->
     ok.
 

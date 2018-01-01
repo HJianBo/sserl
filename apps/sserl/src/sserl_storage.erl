@@ -90,13 +90,8 @@ write_traffic(Traffic=#traffic{time=Timestamp, port=Port, down=Down, up=Up}) ->
 %% Return :: integer()
 current_month_usage(Port) ->
 	{{Year, Mon, _}, _} = calendar:universal_time(),
-    DayMax = calendar:last_day_of_the_month(Year, Mon),
-    DayMin = calendar:last_day_of_the_month(Year, Mon-1),
-
-    DateMax = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon, DayMax])),
-    DateMin = lists:flatten(
-		        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Mon-1, DayMin])),
+    DateMax = tune_date(Year, Mon),
+    DateMin = tune_date(Year, Mon-1),
 
     MatchHead = #traffic_counter4day{port=Port, date='$1', _='_'},
     Guards = [{'=<', '$1', DateMax}, {'>', '$1', DateMin}],
@@ -261,6 +256,15 @@ gen_counterkey(Timestamp, Port) ->
 	
 get_datestring(Timestamp) ->
 	{{Year, Month, Day}, _} = sserl_utils:timestamp_to_datetime(Timestamp),
-	lists:flatten(
-		io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Month, Day])).
+    datestr(Year, Month, Day).
+
+tune_date(Year, 0) ->
+    tune_date(Year-1, 12);
+
+tune_date(Year, Mon) ->
+    datestr(Year, Mon, calendar:last_day_of_the_month(Year, Mon)).
+
+datestr(Year, Month, Day) ->
+    lists:flatten(
+        io_lib:format("~4..0w-~2..0w-~2..0w", [Year, Month, Day])).
 

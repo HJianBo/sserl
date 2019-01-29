@@ -233,8 +233,10 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
 
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {CAddr, CPort}} = inet:peername(CSocket),
-    
-    % access controll
+
+    %% TODO: If the connection socket is invailded or illegal, what should the broker do? kick it? or stop listener??
+
+    %% Access Control
     case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo), expire_time_allow(PortInfo)} of
         {false, _, _} ->
             lager:notice("~p will accept ~p, but beyond conn limit", [Port, CAddr]),
@@ -288,6 +290,7 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
 handle_info({inet_async, _LSocket, _Ref, Error}, State) ->
     {stop, Error, State};
 
+%% Handle the connection process exit event
 handle_info({'EXIT', Pid, Reason}, State = #state{conns=Conns}) ->
     gen_event:notify(?STAT_EVENT, {conn, {close, Pid, Reason}}),
     Remained = lists:filter(fun(C) -> 

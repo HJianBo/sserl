@@ -66,6 +66,7 @@ start_link(Socket, Info) ->
 
 init(Socket, {Port, Server, OTA, Type, {Method,Password}}) ->
     proc_lib:init_ack({ok, self()}),
+    %% Waiting listener change controller
     wait_socket(Socket),
     Cipher = shadowsocks_crypt:init_cipher_info(Method, Password),
     {ok, Source} = inet:peername(Socket),
@@ -81,15 +82,15 @@ init(Socket, {Port, Server, OTA, Type, {Method,Password}}) ->
 init_proto(State=#state{type=server,csocket=CSocket}) ->
     State1 = recv_ivec(State),
     {Addr, Port, Data, State2} = recv_target(State1),
-    gen_event:notify(?STAT_EVENT, {conn, {connect, self(), State#state.source, {Addr, Port}}}),
     case gen_tcp:connect(Addr, Port, ?TCP_OPTS) of
         {ok, SSocket} ->
             self() ! {send, Data},
             inet:setopts(CSocket, [{active, once}]),
             erlang:send_after(?REPORT_INTERVAL, self(), report_flow),
+            gen_event:notify(?STAT_EVENT, {conn, {connect, self(), State#state.source, {Addr, Port}}}),
             gen_server:enter_loop(?MODULE, [], init_handler(State2#state{ssocket=SSocket,target={Addr,Port}}));
         {error, Reason} ->
-            lager:error("conn init failed, state: ~p, reason: ~p~n", [State, Reason]),
+            lager:error("gen_tcp connect failed, reason: ~p, addr: ~p, port: ~p", [Reason, Addr, Port]),
             exit(Reason)
     end;
 
@@ -338,6 +339,7 @@ wait_socket(Socket) ->
 recv_ivec(State = #state{csocket=Socket, 
                          cipher_info=#cipher_info{method=Method,key=Key}=CipherInfo}) ->
     {_, IvLen} = shadowsocks_crypt:key_iv_len(Method),
+    %% XXX: If socket closed, badmatch will occur to there
     {ok, IvData} = gen_tcp:recv(Socket, IvLen, ?RECV_TIMOUT),
     StreamState = shadowsocks_crypt:stream_init(Method, Key, IvData),
     State#state{

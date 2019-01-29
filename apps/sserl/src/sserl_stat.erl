@@ -74,7 +74,9 @@ handle_event({listener, {update, PortInfo}}, State) ->
     {ok, State};
 
 handle_event({listener, {stop, Port}}, State) ->
-    sserl_storage:remove_port(Port),
+    lager:warning("EVENT: listener has stoped, port:~p~n", [Port]),
+    %% FIXME: If some listener stopped, Is there need do somesthing??
+    %%sserl_storage:remove_port(Port),
     {ok, State};
 
 handle_event({listener, {accept, Port, {CHost, CPort}}}, State) ->
@@ -85,9 +87,23 @@ handle_event({listener, Event}, State) ->
     lager:warning("unexcepted event: {listener, ~p}", [Event]),
     {ok, State};
 
+handle_event({conn, {close, _Pid, normal}}, State) ->
+    {ok, State};
+
+handle_event({conn, {close, Pid, Reason}}, State) ->
+    lager:warning("EVENT: conn closed, pid: ~p, reason: ~p", [Pid, Reason]),
+    {ok, State};
+
+handle_event({conn, {connect, Pid, Source, Target}}, State) ->
+    lager:debug("EVENT: conn ~p established proxy from ~p to ~p", [Pid, Source, Target]),
+    {ok, State};
+
+handle_event({conn, {open, Pid}}, State) ->
+    lager:debug("EVENT: created connection process ~p", [Pid]),
+    {ok, State};
 
 handle_event({conn, Event}, State) ->
-    lager:debug("conn: ~p", [Event]),
+    lager:warning("unhandle event ~p", [Event]),
     {ok, State};
 
 handle_event({mutil, Event}, State) ->
@@ -95,7 +111,7 @@ handle_event({mutil, Event}, State) ->
     {ok, State};
 
 handle_event(Event, State) ->
-    lager:debug("Event: ~p", [Event]),
+    lager:warning("unexcepted event ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

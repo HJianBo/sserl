@@ -65,12 +65,16 @@ running_state() ->
 %% Supervisor callbacks
 %%====================================================================
 
-%% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
+%%
 init([]) ->
-    %  Shutdown = 500 ms
-    {ok, { {simple_one_for_one, 1, 5}, 
-           [{sserl_listener, {sserl_listener, start_link, []},
-           transient, 500, worker, [sserl_listener]}]} }.
+    SupFlags = #{strategy => simple_one_for_one, intensity => 1, period => 5},
+    ChildSpecs = [#{id => sserl_listener,
+                    start => {sserl_listener, start_link, []},
+                    restart => transient,
+                    shutdown => 500,
+                    type => worker,
+                    modules => [sserl_listener]}],
+    {ok, {SupFlags, ChildSpecs}}.
 
 %%====================================================================
 %% Internal functions

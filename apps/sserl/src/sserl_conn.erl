@@ -91,7 +91,7 @@ init_proto(State=#state{type=server,csocket=CSocket}) ->
             gen_server:enter_loop(?MODULE, [], init_handler(State2#state{ssocket=SSocket,target={Addr,Port}}));
         {error, Reason} ->
             lager:error("gen_tcp connect failed, reason: ~p, addr: ~p, port: ~p", [Reason, Addr, Port]),
-            exit(Reason)
+            exit(shutdown)
     end;
 
 init_proto(State=#state{type=client, csocket=CSocket, target={Addr,Port},ota=OTA,cipher_info=Cipher}) ->
@@ -112,7 +112,8 @@ init_proto(State=#state{type=client, csocket=CSocket, target={Addr,Port},ota=OTA
             State1 = State#state{ssocket = SSocket, cipher_info=NewCipher, ota_iv=Cipher#cipher_info.encode_iv},
             gen_server:enter_loop(?MODULE, [], init_handler(State1));
         {error, Reason} ->
-            exit(Reason)
+            lager:error("gen_tcp connect failed, reason: ~p, addr: ~p, port: ~p", [Reason, Addr, Port]),
+            exit(shutdown)
     end.
 
 init_handler(State=#state{type=client, ota=true}) ->
@@ -339,7 +340,7 @@ wait_socket(Socket) ->
 recv_ivec(State = #state{csocket=Socket, 
                          cipher_info=#cipher_info{method=Method,key=Key}=CipherInfo}) ->
     {_, IvLen} = shadowsocks_crypt:key_iv_len(Method),
-    %% XXX: If socket closed, badmatch will occur to there
+    %% FIXME: If socket closed, badmatch will occur to there
     {ok, IvData} = gen_tcp:recv(Socket, IvLen, ?RECV_TIMOUT),
     StreamState = shadowsocks_crypt:stream_init(Method, Key, IvData),
     State#state{
@@ -371,6 +372,7 @@ recv_target(State) ->
                 <<Domain:DomLen/binary, DestPort:16/big>> = Data2,
                 {[DomLen,Data2], binary_to_list(Domain), DestPort, Data3, State3};
             _ ->
+                %% FIXME: type: xxx
                 lager:error("error_address_type ~p", [AddrType]),
                 exit({error_address_type, AddrType})
         end,
@@ -382,6 +384,7 @@ recv_target(State) ->
                 Hmac ->
                     {Addr, Port, Rest2, NewState2#state{ota=true}};
                 _ ->
+                    %% FIXME:
                     throw({error, ota_bad_hmac})
             end;
         {_, true} ->
@@ -437,3 +440,4 @@ try_send(Socket, Data) ->
     catch 
         error:_E -> 0
     end.
+

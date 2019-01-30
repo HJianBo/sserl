@@ -234,56 +234,26 @@ handle_info({inet_async, _LSocket, _Ref, {ok, CSocket}},
     true = inet_db:register_socket(CSocket, inet_tcp), 
     {ok, {CAddr, CPort}} = inet:peername(CSocket),
 
-    %% TODO: If the connection socket is invailded or illegal, what should the broker do? kick it? or stop listener??
-
-    %% Access Control
-    case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo), expire_time_allow(PortInfo)} of
-        {false, _, _} ->
-            lager:notice("~p will accept ~p, but beyond conn limit", [Port, CAddr]),
+    %% If the connection socket is invailded or illegal, kick it!
+    case check_access_control(PortInfo, Conns, CAddr) of
+        {false, Reason} ->
+            lager:notice("~p will accept ~p, but ~p", [Port, CAddr, Reason]),
             gen_tcp:close(CSocket),
-            case prim_inet:async_accept(State#state.lsocket, -1) of
-                {ok, _} ->
-                    {noreply, State};
-                {error, Ref} ->
-                    {stop, {async_accept, inet:format_error(Ref)}, State}
-            end;
-        {_, false, _} ->
-            lager:notice("~p will accept ~p, but beyond flow limit", [Port, CAddr]),
-            gen_tcp:close(CSocket),
-            case prim_inet:async_accept(State#state.lsocket, -1) of
-                {ok, _} ->
-                    {noreply, State};
-                {error, Ref} ->
-                    {stop, {async_accept, inet:format_error(Ref)}, State}
-            end;
-        {_, _, false} ->
-            lager:notice("~p will accept ~p, but has expired", [Port, CAddr]),
-            gen_tcp:close(CSocket),
-            case prim_inet:async_accept(State#state.lsocket, -1) of
-                {ok, _} ->
-                    {noreply, State};
-                {error, Ref} ->
-                    {stop, {async_accept, inet:format_error(Ref)}, State}
-            end;
-        {true, true, true} ->
+            async_accept_continue(State);
+        true ->
             gen_event:notify(?STAT_EVENT, {listener, {accept, Port, {CAddr, CPort}}}),
 
             {ok, Pid} = sserl_conn:start_link(CSocket, {Port, Server, OTA, Type, {Method, Password}}),
-
             case gen_tcp:controlling_process(CSocket, Pid) of
                 ok ->
                     gen_event:notify(?STAT_EVENT, {conn, {open, Pid}}),
-                    Pid ! {shoot, CSocket};
+                    Pid ! {shoot, CSocket},
+                    NewConns = [{Pid, CAddr, CPort}|Conns],
+                    async_accept_continue(State, NewConns);
                 {error, _} ->
                     exit(Pid, kill),
-                    gen_tcp:close(CSocket)
-            end,
-            NewConns = [{Pid, CAddr, CPort}|Conns],
-            case prim_inet:async_accept(State#state.lsocket, -1) of
-                {ok, _} ->
-                    {noreply, State#state{conns=NewConns}};
-                {error, Ref} ->
-                    {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=NewConns}}
+                    gen_tcp:close(CSocket),
+                    async_accept_continue(State)
             end
     end;
 
@@ -334,6 +304,27 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+async_accept_continue(State) ->
+    async_accept_continue(State, State#state.conns).
+
+async_accept_continue(State, NewConns) ->
+    case prim_inet:async_accept(State#state.lsocket, -1) of
+        {ok, _} ->
+            {noreply, State#state{conns=NewConns}};
+        {error, Ref} ->
+            {stop, {async_accept, inet:format_error(Ref)}, State#state{conns=NewConns}}
+    end.
+
+%% Check the client access permisson
+check_access_control(PortInfo, Conns, CAddr) ->
+    case {conn_limit_allow(PortInfo, Conns, CAddr), flow_limit_allow(PortInfo), expire_time_allow(PortInfo)} of
+        {false, _, _} -> {false, limited_by_conn};
+        {_, false, _} -> {false, limited_by_flow};
+        {_, _, false} -> {false, limited_by_time};
+        _ -> true
+    end.
+
 max_time() ->
     erlang:convert_time_unit(erlang:system_info(end_time), native, seconds).
 

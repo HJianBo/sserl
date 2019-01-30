@@ -343,14 +343,17 @@ recv_ivec(State = #state{csocket=Socket,
     %% FIXME: If socket closed, badmatch will occur to there
     {ok, IvData} = gen_tcp:recv(Socket, IvLen, ?RECV_TIMOUT),
     StreamState = shadowsocks_crypt:stream_init(Method, Key, IvData),
-    State#state{
-      ota_iv = IvData,
-      cipher_info=CipherInfo#cipher_info{
-                    decode_iv=IvData, stream_dec_state=StreamState
-                   }
-     }.
+    State#state{ota_iv=IvData,
+                cipher_info=CipherInfo#cipher_info{decode_iv=IvData, stream_dec_state=StreamState}}.
 
 %% recv and decode target addr and port
+%%
+%% +--------------+---------------------+------------------+----------+
+%% | Address Type | Destination Address | Destination Port |   Data   |
+%% +--------------+---------------------+------------------+----------+
+%% |      1       |       Variable      |         2        | Variable |
+%% +--------------+---------------------+------------------+----------+
+%%
 recv_target(State) ->
     {<<AddrType:8/big, Data/binary>>, State1} = recv_decode(1, <<>>, State),
     {IPPort, Addr, Port, Rest, NewState} = 
@@ -372,7 +375,7 @@ recv_target(State) ->
                 <<Domain:DomLen/binary, DestPort:16/big>> = Data2,
                 {[DomLen,Data2], binary_to_list(Domain), DestPort, Data3, State3};
             _ ->
-                %% FIXME: type: xxx
+                %% XXX: Unkown address type!!
                 lager:error("error_address_type ~p", [AddrType]),
                 exit({error_address_type, AddrType})
         end,
